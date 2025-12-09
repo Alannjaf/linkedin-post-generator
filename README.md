@@ -6,7 +6,7 @@ A personal web application for generating LinkedIn posts from draft ideas using 
 
 - **AI-Powered Generation**: Uses OpenRouter API to generate professional LinkedIn posts
 - **Multi-Language Support**: Generate posts in English or Kurdish
-- **Tone Control**: Choose from Professional, Casual, Friendly, Inspirational, or Informative tones
+- **Tone Control**: Choose from Professional, Casual, Friendly, Inspirational, Informative, or Comedy tones
 - **Length Control**: Short (~300 chars), Medium (~800 chars), or Long (~1500+ chars)
 - **Hashtag Suggestions**: AI-generated relevant hashtags
 - **Draft Management**: Save, load, and manage your drafts with localStorage
@@ -84,8 +84,25 @@ linkedin-post-generator/
 ## Notes
 
 - Drafts are stored in browser localStorage (limited to 50 drafts)
-- The app uses OpenRouter's default model (GPT-4 Turbo). You can change this in `lib/openrouter.ts`
+- The app uses Google Gemini 3 Pro for text generation and Gemini 3 Pro Image Preview for image generation
 - All data is stored locally in your browser - no backend required
+- Drafts can include generated images and are fully restorable
+
+## Deployment
+
+### Deploy to Netlify
+
+1. Push your code to GitHub
+2. Go to [Netlify](https://www.netlify.com/) and sign in
+3. Click "New site from Git" and connect your repository
+4. Configure build settings:
+   - Build command: `npm run build`
+   - Publish directory: `.next`
+5. Add environment variable:
+   - `OPENROUTER_API_KEY` - Your OpenRouter API key
+6. Click "Deploy site"
+
+The site will be automatically deployed on every push to your main branch.
 
 ## License
 
