@@ -85,6 +85,7 @@ export default function PostGenerator({ onPostGenerated, onError }: PostGenerato
             <option value="friendly">Friendly</option>
             <option value="inspirational">Inspirational</option>
             <option value="informative">Informative</option>
+            <option value="comedy">Comedy</option>
           </select>
         </div>
 

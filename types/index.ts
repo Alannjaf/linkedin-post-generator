@@ -1,6 +1,6 @@
 export type Language = 'kurdish' | 'english';
 
-export type Tone = 'professional' | 'casual' | 'friendly' | 'inspirational' | 'informative';
+export type Tone = 'professional' | 'casual' | 'friendly' | 'inspirational' | 'informative' | 'comedy';
 
 export type PostLength = 'short' | 'medium' | 'long';
 

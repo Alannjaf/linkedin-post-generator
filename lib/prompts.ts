@@ -27,6 +27,10 @@ const TONE_DESCRIPTIONS: Record<Tone, Record<Language, string>> = {
     english: 'informative and educational',
     kurdish: 'زانیاری و پەروەردەیی',
   },
+  comedy: {
+    english: 'humorous and entertaining with light-hearted jokes',
+    kurdish: 'خۆش و پێکەنیناوی بە شوخی و پێکەنین',
+  },
 };
 
 export function buildPostPrompt(params: {
