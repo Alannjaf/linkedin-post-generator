@@ -99,6 +99,12 @@ export default function DraftManager({ onLoadDraft }: DraftManagerProps) {
                   <span className="capitalize">{draft.tone}</span>
                   <span>•</span>
                   <span className="capitalize">{draft.length}</span>
+                  {draft.generatedImage && (
+                    <>
+                      <span>•</span>
+                      <span className="text-green-600">Has Image</span>
+                    </>
+                  )}
                 </div>
                 <p className="text-xs text-gray-400 mt-1">
                   {formatDate(draft.updatedAt)}

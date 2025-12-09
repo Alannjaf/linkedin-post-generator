@@ -102,6 +102,9 @@ export default function Home() {
         tone: currentTone,
         length: currentLength,
         hashtags: selectedHashtags,
+        generatedImage: generatedImage || null,
+        imagePrompt: imagePrompt || undefined,
+        editedImagePrompt: editedImagePrompt || undefined,
       });
       setSuccess('Draft saved!');
       setError(null);
@@ -117,6 +120,9 @@ export default function Home() {
     setCurrentLanguage(draft.language);
     setCurrentTone(draft.tone);
     setCurrentLength(draft.length);
+    setGeneratedImage(draft.generatedImage || null);
+    setImagePrompt(draft.imagePrompt || '');
+    setEditedImagePrompt(draft.editedImagePrompt || draft.imagePrompt || '');
     setError(null);
     setSuccess('Draft loaded!');
   };

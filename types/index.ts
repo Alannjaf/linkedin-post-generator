@@ -12,6 +12,9 @@ export interface Draft {
   tone: Tone;
   length: PostLength;
   hashtags: string[];
+  generatedImage?: string | null;
+  imagePrompt?: string;
+  editedImagePrompt?: string;
   createdAt: string;
   updatedAt: string;
 }
