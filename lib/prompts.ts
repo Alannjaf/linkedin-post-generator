@@ -1,4 +1,4 @@
-import { Language, Tone, PostLength } from '@/types';
+import { Language, Tone, PostLength } from "@/types";
 
 const LENGTH_TARGETS: Record<PostLength, number> = {
   short: 300,
@@ -8,28 +8,28 @@ const LENGTH_TARGETS: Record<PostLength, number> = {
 
 const TONE_DESCRIPTIONS: Record<Tone, Record<Language, string>> = {
   professional: {
-    english: 'professional and business-focused',
-    kurdish: 'پیشەیی و بزنس-مەركەز',
+    english: "professional and business-focused",
+    kurdish: "پیشەیی و بزنس-مەركەز",
   },
   casual: {
-    english: 'casual and relaxed',
-    kurdish: 'ئاسایی و ئارام',
+    english: "casual and relaxed",
+    kurdish: "ئاسایی و ئارام",
   },
   friendly: {
-    english: 'friendly and approachable',
-    kurdish: 'دۆستانە و نزیک',
+    english: "friendly and approachable",
+    kurdish: "دۆستانە و نزیک",
   },
   inspirational: {
-    english: 'inspirational and motivating',
-    kurdish: 'ئیلهامبەخش و هاندەر',
+    english: "inspirational and motivating",
+    kurdish: "ئیلهامبەخش و هاندەر",
   },
   informative: {
-    english: 'informative and educational',
-    kurdish: 'زانیاری و پەروەردەیی',
+    english: "informative and educational",
+    kurdish: "زانیاری و پەروەردەیی",
   },
   comedy: {
-    english: 'humorous and entertaining with light-hearted jokes',
-    kurdish: 'خۆش و پێکەنیناوی بە شوخی و پێکەنین',
+    english: "humorous and entertaining with light-hearted jokes",
+    kurdish: "خۆش و پێکەنیناوی بە شوخی و پێکەنین",
   },
 };
 
@@ -43,7 +43,7 @@ export function buildPostPrompt(params: {
   const targetLength = LENGTH_TARGETS[length];
   const toneDesc = TONE_DESCRIPTIONS[tone][language];
 
-  if (language === 'kurdish') {
+  if (language === "kurdish") {
     return `تۆ بەرهەمهێنەری پۆستی LinkedIn بۆ کوردی. لەبەرگرتنەوەی دەقەکەم، پۆستێکی تەواوی LinkedIn دروست بکە.
 
 زانیاری:
@@ -53,10 +53,10 @@ ${context}
 - شێواز: ${toneDesc}
 - درێژی: نزیکەی ${targetLength} پیت (نزیکەی ${Math.round(targetLength / 5)} وشە)
 - زمان: کوردی
-- فۆرمات: بەکارهێنانی بولد، خاڵەکان، و هێڵەکان بۆ خوێندنەوەی باشتر
-- هاشتاگ: لە کۆتاییدا 3-5 هاشتاگی گونجاو پێشنیار بکە
+- فۆرمات: خاڵەکان، و هێڵەکان بۆ خوێندنەوەی باشتر
+- هاشتاگ: پێویستە لە کۆتای پۆستەکەدا 3-5 هاشتاگی گونجاو بنووسیت بە فۆرماتی: #هاشتاگ1 #هاشتاگ2 #هاشتاگ3
 
-تەنها پۆستەکە بنووسە، بەبێ هیچ شتێکی تر.`;
+تەنها پۆستەکە بنووسە لەگەڵ هاشتاگەکان لە کۆتاییدا.`;
   } else {
     return `You are a LinkedIn post generator. Based on the following context, create a complete LinkedIn post.
 
@@ -65,12 +65,14 @@ ${context}
 
 Requirements:
 - Tone: ${toneDesc}
-- Length: Approximately ${targetLength} characters (around ${Math.round(targetLength / 5)} words)
+- Length: Approximately ${targetLength} characters (around ${Math.round(
+      targetLength / 5
+    )} words)
 - Language: English
-- Format: Use bold text, bullet points, and line breaks for better readability
-- Hashtags: Suggest 3-5 relevant hashtags at the end
+- Format: bullet points, and line breaks for better readability
+- Hashtags: MUST include 3-5 relevant hashtags at the end in format: #hashtag1 #hashtag2 #hashtag3
 
-Write only the post content, nothing else.`;
+Write the post content with hashtags at the end.`;
   }
 }
 
@@ -80,7 +82,7 @@ export function buildHashtagPrompt(params: {
 }): string {
   const { postContent, language } = params;
 
-  if (language === 'kurdish') {
+  if (language === "kurdish") {
     return `بەپێی پۆستی خوارەوە، 3-5 هاشتاگی گونجاو پێشنیار بکە بۆ LinkedIn. تەنها هاشتاگەکان بنووسە، هەر یەک لەسەر هێڵێکی جیا، بەبێ #.
 
 پۆست:
@@ -92,4 +94,3 @@ Post:
 ${postContent}`;
   }
 }
-
