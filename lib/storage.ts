@@ -1,39 +1,40 @@
 import { Draft } from '@/types';
 
-const STORAGE_KEY = 'linkedin_post_drafts';
+const API_BASE = '/api/drafts';
 
-export function saveDraft(draft: Omit<Draft, 'id' | 'createdAt' | 'updatedAt'>): Draft {
-  const drafts = getAllDrafts();
-  
-  const newDraft: Draft = {
-    ...draft,
-    id: Date.now().toString(),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-
-  drafts.unshift(newDraft);
-  
-  // Keep only last 50 drafts
-  const limitedDrafts = drafts.slice(0, 50);
-  
+export async function saveDraft(draft: Omit<Draft, 'id' | 'createdAt' | 'updatedAt'>): Promise<Draft> {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(limitedDrafts));
+    const response = await fetch(API_BASE, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(draft),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Failed to save draft');
+    }
+
+    return await response.json();
   } catch (error) {
     console.error('Failed to save draft:', error);
-    throw new Error('Failed to save draft. LocalStorage might be full.');
+    throw error instanceof Error ? error : new Error('Failed to save draft');
   }
-
-  return newDraft;
 }
 
-export function getAllDrafts(): Draft[] {
+export async function getAllDrafts(): Promise<Draft[]> {
   try {
-    const data = localStorage.getItem(STORAGE_KEY);
-    if (!data) return [];
-    
-    const drafts = JSON.parse(data) as Draft[];
-    return drafts.sort((a, b) => 
+    const response = await fetch(API_BASE);
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Failed to load drafts');
+    }
+
+    const drafts = await response.json();
+    return drafts.sort((a: Draft, b: Draft) => 
       new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
     );
   } catch (error) {
@@ -42,43 +43,64 @@ export function getAllDrafts(): Draft[] {
   }
 }
 
-export function getDraft(id: string): Draft | null {
-  const drafts = getAllDrafts();
-  return drafts.find((d) => d.id === id) || null;
+export async function getDraft(id: string): Promise<Draft | null> {
+  try {
+    const response = await fetch(`${API_BASE}/${id}`);
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        return null;
+      }
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Failed to load draft');
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Failed to load draft:', error);
+    return null;
+  }
 }
 
-export function updateDraft(id: string, updates: Partial<Omit<Draft, 'id' | 'createdAt'>>): Draft | null {
-  const drafts = getAllDrafts();
-  const index = drafts.findIndex((d) => d.id === id);
-  
-  if (index === -1) return null;
-
-  const updatedDraft: Draft = {
-    ...drafts[index],
-    ...updates,
-    updatedAt: new Date().toISOString(),
-  };
-
-  drafts[index] = updatedDraft;
-  
+export async function updateDraft(id: string, updates: Partial<Omit<Draft, 'id' | 'createdAt'>>): Promise<Draft | null> {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(drafts));
+    const response = await fetch(`${API_BASE}/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(updates),
+    });
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        return null;
+      }
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Failed to update draft');
+    }
+
+    return await response.json();
   } catch (error) {
     console.error('Failed to update draft:', error);
-    throw new Error('Failed to update draft.');
+    throw error instanceof Error ? error : new Error('Failed to update draft');
   }
-
-  return updatedDraft;
 }
 
-export function deleteDraft(id: string): boolean {
-  const drafts = getAllDrafts();
-  const filtered = drafts.filter((d) => d.id !== id);
-  
-  if (filtered.length === drafts.length) return false;
-
+export async function deleteDraft(id: string): Promise<boolean> {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
+    const response = await fetch(`${API_BASE}/${id}`, {
+      method: 'DELETE',
+    });
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        return false;
+      }
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Failed to delete draft');
+    }
+
     return true;
   } catch (error) {
     console.error('Failed to delete draft:', error);
@@ -86,11 +108,9 @@ export function deleteDraft(id: string): boolean {
   }
 }
 
-export function clearAllDrafts(): void {
-  try {
-    localStorage.removeItem(STORAGE_KEY);
-  } catch (error) {
-    console.error('Failed to clear drafts:', error);
-  }
+export async function clearAllDrafts(): Promise<void> {
+  // Note: This function is not currently used, but kept for API compatibility
+  // If needed, we could implement a DELETE /api/drafts endpoint
+  console.warn('clearAllDrafts is not implemented for database storage');
 }
 

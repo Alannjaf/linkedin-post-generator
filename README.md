@@ -9,7 +9,7 @@ A personal web application for generating LinkedIn posts from draft ideas using 
 - **Tone Control**: Choose from Professional, Casual, Friendly, Inspirational, Informative, or Comedy tones
 - **Length Control**: Short (~300 chars), Medium (~800 chars), or Long (~1500+ chars)
 - **Hashtag Suggestions**: AI-generated relevant hashtags
-- **Draft Management**: Save, load, and manage your drafts with localStorage
+- **Draft Management**: Save, load, and manage your drafts with Neon PostgreSQL database
 - **Character Counter**: Real-time character count with LinkedIn's 3000 character limit
 - **Export Options**: Copy to clipboard or export as text file
 - **Editable Posts**: Edit generated posts before saving or exporting
@@ -20,6 +20,7 @@ A personal web application for generating LinkedIn posts from draft ideas using 
 
 - Node.js 18+ installed
 - OpenRouter API key ([Get one here](https://openrouter.ai/))
+- Neon database account ([Get one here](https://neon.tech/))
 
 ### Installation
 
@@ -28,12 +29,18 @@ A personal web application for generating LinkedIn posts from draft ideas using 
 npm install
 ```
 
-2. Create a `.env.local` file in the root directory:
+2. Create a Neon database project:
+   - Sign up at [Neon](https://neon.tech/)
+   - Create a new project
+   - Copy your connection string from the Neon dashboard
+
+3. Create a `.env.local` file in the root directory:
 ```env
+DATABASE_URL=postgresql://user:password@host/database?sslmode=require
 OPENROUTER_API_KEY=your_openrouter_api_key_here
 ```
 
-   Note: The API key is kept server-side for security. Do not use `NEXT_PUBLIC_` prefix.
+   Note: Both variables are kept server-side for security. Do not use `NEXT_PUBLIC_` prefix.
 
 3. Run the development server:
 ```bash
@@ -68,8 +75,12 @@ linkedin-post-generator/
 │   └── CharacterCounter.tsx # Character count display
 ├── lib/                    # Utility libraries
 │   ├── openrouter.ts       # OpenRouter API client
-│   ├── storage.ts          # localStorage utilities
+│   ├── storage.ts          # Draft storage API client
+│   ├── db.ts               # Neon database connection
 │   └── prompts.ts          # AI prompt templates
+├── app/
+│   └── api/
+│       └── drafts/         # Draft CRUD API routes
 └── types/                  # TypeScript types
     └── index.ts
 ```
@@ -80,12 +91,14 @@ linkedin-post-generator/
 - **TypeScript** - Type safety
 - **Tailwind CSS** - Styling
 - **OpenRouter API** - AI model access
+- **Neon PostgreSQL** - Serverless database for draft storage
+- **@neondatabase/serverless** - Neon database client
 
 ## Notes
 
-- Drafts are stored in browser localStorage (limited to 50 drafts)
+- Drafts are stored in Neon PostgreSQL database (up to 50 most recent drafts)
 - The app uses Google Gemini 3 Pro for text generation and Gemini 3 Pro Image Preview for image generation
-- All data is stored locally in your browser - no backend required
+- Drafts are persisted server-side and accessible across devices
 - Drafts can include generated images and are fully restorable
 
 ## Deployment
@@ -98,7 +111,8 @@ linkedin-post-generator/
 4. Configure build settings:
    - Build command: `npm run build`
    - Publish directory: `.next`
-5. Add environment variable:
+5. Add environment variables:
+   - `DATABASE_URL` - Your Neon database connection string
    - `OPENROUTER_API_KEY` - Your OpenRouter API key
 6. Click "Deploy site"
 

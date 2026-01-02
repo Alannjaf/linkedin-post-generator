@@ -92,7 +92,7 @@ export default function Home() {
     setError(null);
   };
 
-  const handleSaveDraft = () => {
+  const handleSaveDraft = async () => {
     if (!postContent.trim()) {
       setError('No content to save');
       return;
@@ -100,7 +100,7 @@ export default function Home() {
 
     try {
       const title = postContent.substring(0, 50) || 'Untitled Draft';
-      saveDraft({
+      await saveDraft({
         title,
         content: postContent,
         language: currentLanguage,
