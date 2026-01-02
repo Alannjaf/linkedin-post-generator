@@ -3,7 +3,7 @@ import { PostGenerationParams, GeneratedPost, PostLength } from "@/types";
 import { buildPostPrompt, buildHashtagPrompt } from "@/lib/prompts";
 
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
-const DEFAULT_MODEL = "google/gemini-3-flash-preview";
+const DEFAULT_MODEL = "google/gemini-3-pro-preview";
 const REQUEST_TIMEOUT = 30000; // 30 seconds
 
 // Token limits based on post length

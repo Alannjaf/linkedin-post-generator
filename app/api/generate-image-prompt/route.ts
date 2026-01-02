@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Language } from "@/types";
 
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
-const DEFAULT_MODEL = "google/gemini-3-flash-preview";
+const DEFAULT_MODEL = "google/gemini-3-pro-preview";
 
 interface OpenRouterResponse {
   choices: Array<{
@@ -35,10 +35,24 @@ export async function POST(request: NextRequest) {
 
     // Always generate the prompt in English, but note if Kurdish text should be included in the image
     const isKurdishPost = language === "kurdish";
-    const analysisPrompt = `You are an image prompt generator for LinkedIn posts. Based on the following post content, create a detailed image generation prompt that accurately represents and complements the post.
+    const analysisPrompt = `You are an image prompt generator for LinkedIn posts. Based on the following post content, create a detailed, unique image generation prompt that accurately represents and complements the post.
 
 Post Content:
 ${postContent}
+
+CRITICAL REQUIREMENTS FOR UNIQUENESS:
+- Each prompt MUST be unique and tailored specifically to this post's content
+- AVOID repetitive or generic styles like "3D isometric", "isometric illustration", "3D render", or similar overused styles
+- Analyze the post content deeply to determine the most appropriate visual style from these options:
+  * Professional photography (for real-world, authentic content)
+  * Flat design or modern illustration (for clean, conceptual content)
+  * Abstract or minimalist design (for philosophical or high-level concepts)
+  * Documentary or editorial style (for news, insights, or stories)
+  * Infographic-style visualization (for data or process content)
+  * Environmental or lifestyle photography (for personal or cultural content)
+- Choose the style that best matches the post's tone, subject matter, and message
+- Vary visual approaches: some posts may need photography, others illustration, others abstract design
+- The style should feel fresh and appropriate for the specific content, not generic
 
 Requirements:
 - The prompt should be for a professional, high-quality LinkedIn image
@@ -47,15 +61,25 @@ Requirements:
 - It should visually represent the post's content in a graphic way
 - It should be image-only (no text overlays)${
       isKurdishPost
-        ? ", UNLESS the image needs to display Kurdish text as part of the visual design (e.g., text on signs, banners, or graphics). In that case, include the Kurdish text in the prompt exactly as it appears in the post"
+        ? `\n- IMPORTANT FOR KURDISH POSTS: If the image design requires text elements (signs, banners, graphics, quotes, or any visual text), you MUST include the Kurdish text from the post content exactly as written. The Kurdish text should be part of the visual design itself, not an overlay. When including Kurdish text, specify it clearly in the prompt (e.g., "a sign displaying the Kurdish text: [exact Kurdish text from post]")`
         : ""
     }
 - It should be suitable for business social media platform
 - Include specific visual elements, colors, composition, and style that match the post's tone and content
 - The prompt should be detailed enough for an image generation AI to create a relevant image
-- IMPORTANT: Write the entire prompt in English, but if the image needs to show text (like signs, banners, or graphics), you may include the original text from the post (which may be in Kurdish) as part of the visual description
+- IMPORTANT: Write the entire prompt in English${
+      isKurdishPost
+        ? ", but when Kurdish text is needed in the image (as part of signs, banners, or graphics), include the exact Kurdish text from the post"
+        : ""
+    }
 
-Write only the image generation prompt in English, nothing else.`;
+Style Variety Examples (use as inspiration, not to copy):
+- For technology posts: Consider modern tech photography, abstract data visualizations, or clean UI mockups
+- For business posts: Consider professional office photography, collaboration scenes, or business concept illustrations
+- For personal/cultural posts: Consider lifestyle photography, cultural elements, or authentic scenes
+- For motivational posts: Consider inspiring landscapes, abstract growth concepts, or uplifting imagery
+
+Write only the image generation prompt in English, nothing else. Make it unique to this specific post content.`;
 
     const response = await fetch(OPENROUTER_API_URL, {
       method: "POST",
@@ -74,7 +98,7 @@ Write only the image generation prompt in English, nothing else.`;
             content: analysisPrompt,
           },
         ],
-        temperature: 0.7,
+        temperature: 0.9,
         max_tokens: 1500,
       }),
     });
