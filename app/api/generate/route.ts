@@ -4,7 +4,7 @@ import { buildPostPrompt, buildHashtagPrompt } from "@/lib/prompts";
 
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 const DEFAULT_MODEL = "google/gemini-3-pro-preview";
-const REQUEST_TIMEOUT = 30000; // 30 seconds
+const REQUEST_TIMEOUT = 60000; // 60 seconds (Pro models are slower)
 
 // Token limits based on post length
 const TOKEN_LIMITS: Record<PostLength, number> = {
@@ -60,23 +60,58 @@ async function callOpenRouter(
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(
-        errorData.error?.message || `API error: ${response.statusText}`
-      );
+      const errorMessage = errorData.error?.message || errorData.message || `API error: ${response.statusText}`;
+      console.error("OpenRouter API error response:", {
+        status: response.status,
+        statusText: response.statusText,
+        errorData,
+      });
+      throw new Error(errorMessage);
     }
 
-    const data: OpenRouterResponse = await response.json();
+    const data: any = await response.json();
+
+    // Log the full response for debugging
+    console.log("OpenRouter API response structure:", {
+      hasError: !!data.error,
+      hasChoices: !!data.choices,
+      choicesLength: data.choices?.length,
+      firstChoice: data.choices?.[0],
+    });
 
     if (data.error) {
-      throw new Error(data.error.message);
+      console.error("OpenRouter API error:", data.error);
+      throw new Error(data.error.message || "API returned an error");
     }
 
-    return data.choices[0]?.message?.content?.trim() || "";
+    if (!data.choices || data.choices.length === 0) {
+      console.error("No choices in OpenRouter response. Full response:", JSON.stringify(data, null, 2));
+      throw new Error("No response choices from API. The model might not be available or the response format is unexpected.");
+    }
+
+    // Handle different possible response structures
+    const firstChoice = data.choices[0];
+    const content = firstChoice?.message?.content || 
+                   firstChoice?.text || 
+                   firstChoice?.content || 
+                   "";
+
+    const trimmedContent = typeof content === 'string' ? content.trim() : "";
+    
+    if (!trimmedContent) {
+      console.error("Empty content in response. Full response:", JSON.stringify(data, null, 2));
+      throw new Error("API returned empty content. Please check the model name and try again.");
+    }
+
+    return trimmedContent;
   } catch (error) {
+    console.error("callOpenRouter error:", error);
     if (error instanceof Error) {
       if (error.name === "TimeoutError" || error.message.includes("timeout")) {
         throw new Error("Request timed out. Please try again.");
       }
+      // Log the actual error message for debugging
+      console.error("OpenRouter API error details:", error.message);
       throw error;
     }
     throw new Error("Failed to generate post");
