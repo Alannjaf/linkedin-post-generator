@@ -8,12 +8,19 @@ const DEFAULT_MODEL = "google/gemini-3-pro-preview";
 const FALLBACK_MODEL = "google/gemini-3-flash-preview";
 const REQUEST_TIMEOUT = 60000; // 60 seconds (Pro models are slower)
 
-// Token limits based on post length
-// Increased limits to accommodate Pro models which generate more verbose content
-const TOKEN_LIMITS: Record<PostLength, number> = {
-  short: 600,    // Increased from 400
-  medium: 1500,  // Increased from 1000 (Pro model was hitting limit at 997)
-  long: 3000,    // Increased from 2000
+// Character count targets based on post length (used in prompts, not as hard limits)
+const CHARACTER_TARGETS: Record<PostLength, number> = {
+  short: 300,
+  medium: 800,
+  long: 1500,
+};
+
+// High token limits to allow model to generate freely based on character instructions
+// Pro models use reasoning tokens, so we set high limits and rely on prompt instructions
+const MAX_TOKENS: Record<PostLength, number> = {
+  short: 2000,
+  medium: 4000,
+  long: 6000,
 };
 
 interface OpenRouterMessage {
@@ -154,7 +161,7 @@ export async function POST(request: NextRequest) {
     }
 
     const prompt = buildPostPrompt({ context, language, tone, length });
-    const maxTokens = TOKEN_LIMITS[length];
+    const maxTokens = MAX_TOKENS[length];
     const content = await callOpenRouter(
       [{ role: "user", content: prompt }],
       maxTokens

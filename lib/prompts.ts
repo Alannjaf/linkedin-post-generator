@@ -51,12 +51,12 @@ ${context}
 
 تێبینیەکان:
 - شێواز: ${toneDesc}
-- درێژی: نزیکەی ${targetLength} پیت (نزیکەی ${Math.round(targetLength / 5)} وشە)
+- درێژی: گرنگە - پۆستەکە دەبێت نزیکەی ${targetLength} پیت بێت (نزیکەی ${Math.round(targetLength / 5)} وشە). بە وردی پیتەکان بژمێرە و بۆمەبەستی ئەم درێژییە بکارە. ئەمە پێویستی بە ژماردنی پیتە، نەک تۆکن.
 - زمان: کوردی
 - فۆرمات: خاڵەکان، و هێڵەکان بۆ خوێندنەوەی باشتر
 - هاشتاگ: پێویستە لە کۆتای پۆستەکەدا 3-5 هاشتاگی گونجاو بنووسیت بە فۆرماتی: #هاشتاگ1 #هاشتاگ2 #هاشتاگ3
 
-تەنها پۆستەکە بنووسە لەگەڵ هاشتاگەکان لە کۆتاییدا.`;
+گرنگ: ژماردنی پیتەکان (${targetLength} پیت) هەموو دەقەکە لەخۆدەگرێت لەوانەش هاشتاگەکان. پۆستەکە بنووسە لەگەڵ هاشتاگەکان لە کۆتاییدا، دڵنیابکە کە کۆی گشتی پیتەکان نزیکەی ${targetLength} پیت بێت.`;
   } else {
     return `You are a LinkedIn post generator. Based on the following context, create a complete LinkedIn post.
 
@@ -65,14 +65,14 @@ ${context}
 
 Requirements:
 - Tone: ${toneDesc}
-- Length: Approximately ${targetLength} characters (around ${Math.round(
+- Length: CRITICAL - The post must be approximately ${targetLength} characters long (around ${Math.round(
       targetLength / 5
-    )} words)
+    )} words). Count characters carefully and aim for this exact length. This is a character count requirement, not a token count.
 - Language: English
 - Format: bullet points, and line breaks for better readability
 - Hashtags: MUST include 3-5 relevant hashtags at the end in format: #hashtag1 #hashtag2 #hashtag3
 
-Write the post content with hashtags at the end.`;
+IMPORTANT: The character count (${targetLength} characters) includes all text including hashtags. Write the post content with hashtags at the end, ensuring the total character count is close to ${targetLength} characters.`;
   }
 }
 
