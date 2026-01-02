@@ -1,6 +1,6 @@
 import { neon } from '@neondatabase/serverless';
 
-let sqlInstance: ReturnType<typeof neon> | null = null;
+let sqlInstance: any = null;
 
 function getSql() {
   if (!process.env.DATABASE_URL) {
@@ -14,15 +14,35 @@ function getSql() {
   return sqlInstance;
 }
 
-// Create a proxy that lazily initializes the SQL instance
-export const sql = new Proxy({} as ReturnType<typeof neon>, {
-  get(_target, prop) {
-    const sql = getSql();
-    const value = (sql as any)[prop];
-    if (typeof value === 'function') {
-      return value.bind(sql);
-    }
-    return value;
+// Create a function that can be used as a tagged template literal
+const sqlFunction = function sql(strings: TemplateStringsArray, ...values: any[]) {
+  return getSql()(strings, ...values);
+};
+
+// Add properties dynamically
+Object.defineProperty(sqlFunction, 'query', {
+  get() {
+    return getSql().query;
   },
+  enumerable: false,
+  configurable: true,
 });
+
+Object.defineProperty(sqlFunction, 'unsafe', {
+  get() {
+    return getSql().unsafe;
+  },
+  enumerable: false,
+  configurable: true,
+});
+
+Object.defineProperty(sqlFunction, 'transaction', {
+  get() {
+    return getSql().transaction;
+  },
+  enumerable: false,
+  configurable: true,
+});
+
+export const sql = sqlFunction as ReturnType<typeof neon>;
 
