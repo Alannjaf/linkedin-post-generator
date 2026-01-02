@@ -6,21 +6,12 @@ const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 // Try gemini-3-pro-preview first, fallback to gemini-3-flash-preview if needed
 const DEFAULT_MODEL = "google/gemini-3-pro-preview";
 const FALLBACK_MODEL = "google/gemini-3-flash-preview";
-const REQUEST_TIMEOUT = 60000; // 60 seconds (Pro models are slower)
 
 // Character count targets based on post length (used in prompts, not as hard limits)
 const CHARACTER_TARGETS: Record<PostLength, number> = {
   short: 300,
   medium: 800,
   long: 1500,
-};
-
-// High token limits to allow model to generate freely based on character instructions
-// Pro models use reasoning tokens, so we set high limits and rely on prompt instructions
-const MAX_TOKENS: Record<PostLength, number> = {
-  short: 2000,
-  medium: 4000,
-  long: 6000,
 };
 
 interface OpenRouterMessage {
@@ -105,7 +96,6 @@ function cleanPostContent(content: string, language: Language): string {
 
 async function callOpenRouter(
   messages: OpenRouterMessage[],
-  maxTokens: number,
   useFallback: boolean = false
 ) {
   const apiKey = process.env.OPENROUTER_API_KEY;
@@ -131,9 +121,7 @@ async function callOpenRouter(
         model: modelToUse,
         messages,
         temperature: 0.7,
-        max_tokens: maxTokens,
       }),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT),
     });
 
     if (!response.ok) {
@@ -191,7 +179,7 @@ async function callOpenRouter(
       // Try fallback model if we haven't already
       if (!useFallback) {
         console.log(`Retrying with fallback model: ${FALLBACK_MODEL}`);
-        return callOpenRouter(messages, maxTokens, true);
+        return callOpenRouter(messages, true);
       }
       
       throw new Error(`API returned empty content. Model "${modelToUse}" might not be available or the response format is unexpected. Please check the model name.`);
@@ -201,9 +189,6 @@ async function callOpenRouter(
   } catch (error) {
     console.error("callOpenRouter error:", error);
     if (error instanceof Error) {
-      if (error.name === "TimeoutError" || error.message.includes("timeout")) {
-        throw new Error("Request timed out. Please try again.");
-      }
       // Log the actual error message for debugging
       console.error("OpenRouter API error details:", error.message);
       throw error;
@@ -225,10 +210,8 @@ export async function POST(request: NextRequest) {
     }
 
     const prompt = buildPostPrompt({ context, language, tone, length });
-    const maxTokens = MAX_TOKENS[length];
     const content = await callOpenRouter(
-      [{ role: "user", content: prompt }],
-      maxTokens
+      [{ role: "user", content: prompt }]
     );
 
     if (!content) {
@@ -257,10 +240,9 @@ export async function POST(request: NextRequest) {
           postContent: cleanContent,
           language,
         });
-        // Use smaller token limit for hashtag generation (just hashtags, not full post)
+        // Generate hashtags separately
         const hashtagContent = await callOpenRouter(
-          [{ role: "user", content: hashtagPrompt }],
-          200 // Small token limit for hashtags only
+          [{ role: "user", content: hashtagPrompt }]
         );
 
         foundHashtags = hashtagContent

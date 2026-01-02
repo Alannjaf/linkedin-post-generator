@@ -99,7 +99,6 @@ Write only the image generation prompt in English, nothing else. Make it unique 
           },
         ],
         temperature: 0.9,
-        max_tokens: 1500,
       }),
     });
 
