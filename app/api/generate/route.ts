@@ -9,10 +9,11 @@ const FALLBACK_MODEL = "google/gemini-3-flash-preview";
 const REQUEST_TIMEOUT = 60000; // 60 seconds (Pro models are slower)
 
 // Token limits based on post length
+// Increased limits to accommodate Pro models which generate more verbose content
 const TOKEN_LIMITS: Record<PostLength, number> = {
-  short: 400,
-  medium: 1000,
-  long: 2000,
+  short: 600,    // Increased from 400
+  medium: 1500,  // Increased from 1000 (Pro model was hitting limit at 997)
+  long: 3000,    // Increased from 2000
 };
 
 interface OpenRouterMessage {
