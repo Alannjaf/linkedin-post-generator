@@ -3,7 +3,9 @@ import { PostGenerationParams, GeneratedPost, PostLength } from "@/types";
 import { buildPostPrompt, buildHashtagPrompt } from "@/lib/prompts";
 
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
+// Try gemini-3-pro-preview first, fallback to gemini-3-flash-preview if needed
 const DEFAULT_MODEL = "google/gemini-3-pro-preview";
+const FALLBACK_MODEL = "google/gemini-3-flash-preview";
 const REQUEST_TIMEOUT = 60000; // 60 seconds (Pro models are slower)
 
 // Token limits based on post length
@@ -31,13 +33,17 @@ interface OpenRouterResponse {
 
 async function callOpenRouter(
   messages: OpenRouterMessage[],
-  maxTokens: number
+  maxTokens: number,
+  useFallback: boolean = false
 ) {
   const apiKey = process.env.OPENROUTER_API_KEY;
 
   if (!apiKey) {
     throw new Error("OpenRouter API key is not configured");
   }
+
+  const modelToUse = useFallback ? FALLBACK_MODEL : DEFAULT_MODEL;
+  console.log(`Using model: ${modelToUse}`);
 
   try {
     const response = await fetch(OPENROUTER_API_URL, {
@@ -50,7 +56,7 @@ async function callOpenRouter(
         "X-Title": "LinkedIn Post Generator",
       },
       body: JSON.stringify({
-        model: DEFAULT_MODEL,
+        model: modelToUse,
         messages,
         temperature: 0.7,
         max_tokens: maxTokens,
@@ -72,11 +78,13 @@ async function callOpenRouter(
     const data: any = await response.json();
 
     // Log the full response for debugging
-    console.log("OpenRouter API response structure:", {
+    console.log("OpenRouter API response structure:", JSON.stringify(data, null, 2));
+    console.log("Response details:", {
       hasError: !!data.error,
       hasChoices: !!data.choices,
       choicesLength: data.choices?.length,
       firstChoice: data.choices?.[0],
+      firstChoiceKeys: data.choices?.[0] ? Object.keys(data.choices[0]) : [],
     });
 
     if (data.error) {
@@ -91,16 +99,30 @@ async function callOpenRouter(
 
     // Handle different possible response structures
     const firstChoice = data.choices[0];
+    console.log("First choice structure:", JSON.stringify(firstChoice, null, 2));
+    
+    // Try multiple possible content locations
     const content = firstChoice?.message?.content || 
+                   firstChoice?.message?.text ||
                    firstChoice?.text || 
-                   firstChoice?.content || 
+                   firstChoice?.content ||
+                   firstChoice?.delta?.content ||
                    "";
 
     const trimmedContent = typeof content === 'string' ? content.trim() : "";
     
     if (!trimmedContent) {
       console.error("Empty content in response. Full response:", JSON.stringify(data, null, 2));
-      throw new Error("API returned empty content. Please check the model name and try again.");
+      console.error("First choice keys:", firstChoice ? Object.keys(firstChoice) : "no first choice");
+      console.error("First choice message keys:", firstChoice?.message ? Object.keys(firstChoice.message) : "no message");
+      
+      // Try fallback model if we haven't already
+      if (!useFallback) {
+        console.log(`Retrying with fallback model: ${FALLBACK_MODEL}`);
+        return callOpenRouter(messages, maxTokens, true);
+      }
+      
+      throw new Error(`API returned empty content. Model "${modelToUse}" might not be available or the response format is unexpected. Please check the model name.`);
     }
 
     return trimmedContent;
