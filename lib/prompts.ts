@@ -56,7 +56,12 @@ ${context}
 - فۆرمات: خاڵەکان، و هێڵەکان بۆ خوێندنەوەی باشتر
 - هاشتاگ: پێویستە لە کۆتای پۆستەکەدا 3-5 هاشتاگی گونجاو بنووسیت بە فۆرماتی: #هاشتاگ1 #هاشتاگ2 #هاشتاگ3
 
-گرنگ: ژماردنی پیتەکان (${targetLength} پیت) هەموو دەقەکە لەخۆدەگرێت لەوانەش هاشتاگەکان. پۆستەکە بنووسە لەگەڵ هاشتاگەکان لە کۆتاییدا، دڵنیابکە کە کۆی گشتی پیتەکان نزیکەی ${targetLength} پیت بێت.`;
+گرنگ: ژماردنی پیتەکان (${targetLength} پیت) هەموو دەقەکە لەخۆدەگرێت لەوانەش هاشتاگەکان. پۆستەکە بنووسە لەگەڵ هاشتاگەکان لە کۆتاییدا، دڵنیابکە کە کۆی گشتی پیتەکان نزیکەی ${targetLength} پیت بێت.
+
+پێویستیەکی زۆر گرنگ: 
+- پێویست نییە هیچ دەربڕینێکی پێشەکی یان ڕوونکردنەوە بنووسیت. پۆستەکە بەبێ هیچ دەربڕینێکی وەک "فەرموو"، "ئەمەش پۆستێکی LinkedIn"، "بەپێی داواکارییەکانت" دەست پێ بکە.
+- بە هیچ شێوەیەک نیشانەی "*" (ئەستێرە) بەکار مەهێنە لە ناوەڕۆکی پۆستەکەدا.
+- بە راستەوخۆ پۆستەکە بنووسە، بەبێ هیچ پێشەکییەک.`;
   } else {
     return `You are a LinkedIn post generator. Based on the following context, create a complete LinkedIn post.
 
@@ -72,7 +77,12 @@ Requirements:
 - Format: bullet points, and line breaks for better readability
 - Hashtags: MUST include 3-5 relevant hashtags at the end in format: #hashtag1 #hashtag2 #hashtag3
 
-IMPORTANT: The character count (${targetLength} characters) includes all text including hashtags. Write the post content with hashtags at the end, ensuring the total character count is close to ${targetLength} characters.`;
+IMPORTANT: The character count (${targetLength} characters) includes all text including hashtags. Write the post content with hashtags at the end, ensuring the total character count is close to ${targetLength} characters.
+
+CRITICAL REQUIREMENTS:
+- DO NOT include any introductory text, meta-commentary, or explanatory phrases like "Here's a LinkedIn post", "Based on your requirements", "This is a post about", etc.
+- DO NOT use asterisks "*" anywhere in the content. Use bullet points with dashes "-" or other formatting instead.
+- Start directly with the post content. No preamble or introduction.`;
   }
 }
 

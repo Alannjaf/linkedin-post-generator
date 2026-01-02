@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PostGenerationParams, GeneratedPost, PostLength } from "@/types";
+import { PostGenerationParams, GeneratedPost, PostLength, Language } from "@/types";
 import { buildPostPrompt, buildHashtagPrompt } from "@/lib/prompts";
 
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
@@ -37,6 +37,70 @@ interface OpenRouterResponse {
   error?: {
     message: string;
   };
+}
+
+// Clean up generated content: remove meta-commentary and asterisks
+function cleanPostContent(content: string, language: Language): string {
+  let cleaned = content;
+
+  // Remove asterisks
+  cleaned = cleaned.replace(/\*/g, '');
+
+  // Remove meta-commentary patterns
+  const lines = cleaned.split('\n');
+  const cleanedLines: string[] = [];
+  
+  // Patterns to identify and remove meta-commentary lines
+  const metaPatterns = language === 'kurdish' 
+    ? [
+        /^فەرموو[،,]/i,
+        /^ئەمەش پۆستێکی/i,
+        /^بەپێی داواکارییەکانت/i,
+        /^بەپێی داواکاریەکانت/i,
+        /^لەبەرگرتنەوەی/i,
+        /^پۆستێکی LinkedIn/i,
+        /نزیکەی \d+ پیت/i,
+        /تێکەڵەیەکە لە/i,
+      ]
+    : [
+        /^here'?s a linkedin post/i,
+        /^based on your requirements/i,
+        /^this is a linkedin post/i,
+        /^here is a post/i,
+        /^based on the context/i,
+        /^following is a linkedin post/i,
+        /approximately \d+ characters/i,
+        /around \d+ words/i,
+      ];
+
+  for (const line of lines) {
+    const trimmedLine = line.trim();
+    // Skip empty lines at the start
+    if (cleanedLines.length === 0 && !trimmedLine) {
+      continue;
+    }
+    
+    // Check if line matches meta-commentary patterns
+    const isMetaCommentary = metaPatterns.some(pattern => pattern.test(trimmedLine));
+    
+    // Also check if line contains colons followed by explanatory text (common in meta-commentary)
+    const hasExplanatoryColon = trimmedLine.includes(':') && 
+      (trimmedLine.toLowerCase().includes('post') || 
+       trimmedLine.includes('پۆست') ||
+       trimmedLine.includes('داواکاری') ||
+       trimmedLine.includes('requirements'));
+    
+    if (!isMetaCommentary && !hasExplanatoryColon) {
+      cleanedLines.push(line);
+    }
+  }
+
+  cleaned = cleanedLines.join('\n').trim();
+
+  // Remove any remaining asterisks (in case they were in the middle of lines)
+  cleaned = cleaned.replace(/\*/g, '');
+
+  return cleaned;
 }
 
 async function callOpenRouter(
@@ -171,16 +235,19 @@ export async function POST(request: NextRequest) {
       throw new Error("No content generated");
     }
 
-    // Extract hashtags from the content using matchAll (more efficient)
+    // Clean up content: remove meta-commentary and asterisks
+    const cleanedContent = cleanPostContent(content, language);
+
+    // Extract hashtags from the cleaned content using matchAll (more efficient)
     const hashtagRegex = /#([\w\u0600-\u06FF]+)/g; // Supports Unicode for Kurdish
-    const hashtagMatches = Array.from(content.matchAll(hashtagRegex));
+    const hashtagMatches = Array.from(cleanedContent.matchAll(hashtagRegex));
     let foundHashtags = hashtagMatches
       .map((match) => match[1])
       .filter((tag) => tag.length > 0)
       .slice(0, 5);
 
     // Remove hashtags from content
-    const cleanContent = content.replace(hashtagRegex, "").trim();
+    const cleanContent = cleanedContent.replace(hashtagRegex, "").trim();
 
     // Fallback: If no hashtags found, generate them separately as a safety mechanism
     // This handles cases where AI doesn't follow instructions or regex fails to match
