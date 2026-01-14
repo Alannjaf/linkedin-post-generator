@@ -15,6 +15,7 @@ export interface Draft {
   generatedImage?: string | null;
   imagePrompt?: string;
   editedImagePrompt?: string;
+  originalContext?: string;
   createdAt: string;
   updatedAt: string;
 }

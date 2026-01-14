@@ -5,7 +5,7 @@ import { Language, Tone, PostLength } from '@/types';
 import { generatePost } from '@/lib/openrouter';
 
 interface PostGeneratorProps {
-  onPostGenerated: (content: string, hashtags: string[], language: Language, tone: Tone, length: PostLength) => void;
+  onPostGenerated: (content: string, hashtags: string[], language: Language, tone: Tone, length: PostLength, context: string) => void;
   onError: (error: string) => void;
 }
 
@@ -30,7 +30,7 @@ export default function PostGenerator({ onPostGenerated, onError }: PostGenerato
         tone,
         length,
       });
-      onPostGenerated(result.content, result.hashtags, language, tone, length);
+      onPostGenerated(result.content, result.hashtags, language, tone, length, context.trim());
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to generate post';
       onError(errorMessage);

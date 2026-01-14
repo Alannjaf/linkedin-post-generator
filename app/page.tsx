@@ -17,6 +17,7 @@ export default function Home() {
   const [currentLanguage, setCurrentLanguage] = useState<Language>('english');
   const [currentTone, setCurrentTone] = useState<Tone>('professional');
   const [currentLength, setCurrentLength] = useState<PostLength>('medium');
+  const [originalContext, setOriginalContext] = useState<string>('');
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [isGeneratingImagePrompt, setIsGeneratingImagePrompt] = useState(false);
@@ -36,13 +37,14 @@ export default function Home() {
     }
   }, [error, success]);
 
-  const handlePostGenerated = (content: string, generatedHashtags: string[], language: Language, tone: Tone, length: PostLength) => {
+  const handlePostGenerated = (content: string, generatedHashtags: string[], language: Language, tone: Tone, length: PostLength, context: string) => {
     setPostContent(content);
     setHashtags(generatedHashtags);
     setSelectedHashtags([]);
     setCurrentLanguage(language);
     setCurrentTone(tone);
     setCurrentLength(length);
+    setOriginalContext(context);
     setImagePrompt('');
     setEditedImagePrompt('');
     setGeneratedImage(null);
@@ -110,6 +112,7 @@ export default function Home() {
         generatedImage: generatedImage || null,
         imagePrompt: imagePrompt || undefined,
         editedImagePrompt: editedImagePrompt || undefined,
+        originalContext: originalContext || undefined,
       });
       setSuccess('Draft saved!');
       setError(null);
@@ -125,6 +128,7 @@ export default function Home() {
     setCurrentLanguage(draft.language);
     setCurrentTone(draft.tone);
     setCurrentLength(draft.length);
+    setOriginalContext(draft.originalContext || '');
     setGeneratedImage(draft.generatedImage || null);
     setImagePrompt(draft.imagePrompt || '');
     setEditedImagePrompt(draft.editedImagePrompt || draft.imagePrompt || '');
@@ -137,6 +141,7 @@ export default function Home() {
       setPostContent('');
       setHashtags([]);
       setSelectedHashtags([]);
+      setOriginalContext('');
       setGeneratedImage(null);
       setImagePrompt('');
       setEditedImagePrompt('');
@@ -165,6 +170,8 @@ export default function Home() {
         body: JSON.stringify({
           postContent,
           language: currentLanguage,
+          tone: currentTone,
+          context: originalContext,
         }),
       });
 
@@ -213,6 +220,8 @@ export default function Home() {
           body: JSON.stringify({
             postContent,
             language: currentLanguage,
+            tone: currentTone,
+            context: originalContext,
           }),
         });
 

@@ -18,7 +18,7 @@ interface OpenRouterResponse {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { postContent, language } = body;
+    const { postContent, language, tone, context } = body;
 
     if (!postContent || !language) {
       return NextResponse.json(
@@ -35,10 +35,13 @@ export async function POST(request: NextRequest) {
 
     // Always generate the prompt in English, but note if Kurdish text should be included in the image
     const isKurdishPost = language === "kurdish";
-    const analysisPrompt = `You are an image prompt generator for LinkedIn posts. Based on the following post content, create a detailed, unique image generation prompt that accurately represents and complements the post.
+    const contextSection = context ? `\n\nOriginal Context/Draft:\n${context}` : "";
+    const toneSection = tone ? `\n\nTone of the post: ${tone}` : "";
+    
+    const analysisPrompt = `You are an image prompt generator for LinkedIn posts. Based on the following post content, tone, and original context, create a detailed, unique image generation prompt that accurately represents and complements the post.
 
 Post Content:
-${postContent}
+${postContent}${toneSection}${contextSection}
 
 CRITICAL REQUIREMENTS FOR UNIQUENESS:
 - Each prompt MUST be unique and tailored specifically to this post's content
@@ -58,11 +61,19 @@ Requirements:
 - The prompt should be for a professional, high-quality LinkedIn image
 - It should intelligently reflect the core message and themes of the post
 - It should be professional, modern, and clean
-- It should visually represent the post's content in a graphic way
-- It should be image-only (no text overlays)${
+- It should visually represent the post's content in a graphic way${
       isKurdishPost
-        ? `\n- IMPORTANT FOR KURDISH POSTS: If the image design requires text elements (signs, banners, graphics, quotes, or any visual text), you MUST include the Kurdish text from the post content exactly as written. The Kurdish text should be part of the visual design itself, not an overlay. When including Kurdish text, specify it clearly in the prompt (e.g., "a sign displaying the Kurdish text: [exact Kurdish text from post]")`
-        : ""
+        ? `
+- CRITICAL FOR KURDISH POSTS: Since this is a Kurdish post, you MUST include Kurdish text in the image whenever appropriate
+- Identify key phrases, quotes, or important concepts from the post content and render them in Kurdish in the image
+- Examples of when to include Kurdish text: motivational quotes, statistics, key takeaways, headlines, signs, banners, or any text that enhances the visual message
+- When including Kurdish text in the image, specify it exactly as: "Kurdish text: [exact Kurdish text from post]" or "sign displaying: [Kurdish text]" or "banner with text: [Kurdish text]"
+- For abstract or conceptual images where text would distract, make the image purely visual but use Kurdish cultural elements, colors, or imagery that resonates with Kurdish context
+- The image should feel authentic to Kurdish culture and language when appropriate`
+        : `
+- For English posts, the image should generally be visual-only without text overlays
+- Exception: Include text only when it's essential for the message (quotes, statistics, key takeaways)
+- When including text in English, make it minimal and integrated naturally into the design`
     }
 - It should be suitable for business social media platform
 - Include specific visual elements, colors, composition, and style that match the post's tone and content
