@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Language } from "@/types";
+import { logger } from "@/lib/utils/logger";
+import { OPENROUTER_API_URL, DEFAULT_MODEL } from "@/lib/config/api-config";
 
-const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
-const DEFAULT_MODEL = "google/gemini-3-pro-preview";
 
 interface OpenRouterResponse {
   choices: Array<{
@@ -354,7 +354,7 @@ Now create a detailed image generation prompt for the post above. ${isKurdishPos
                             generatedPrompt.includes('Kurdish:');
       
       if (!hasKurdishText) {
-        console.warn('Generated prompt missing Kurdish text, regenerating with stricter instructions...');
+        logger.warn('Generated prompt missing Kurdish text, regenerating with stricter instructions...');
         
         // Retry with even more forceful prompt
         const retryPrompt = `CRITICAL ERROR: Your previous response was missing required Kurdish text.
@@ -419,7 +419,7 @@ Create the image prompt now, ensuring the Kurdish question is prominently featur
       postType: postType
     });
   } catch (error) {
-    console.error("Error generating image prompt:", error);
+    logger.error("Error generating image prompt:", error);
     const errorMessage =
       error instanceof Error
         ? error.message

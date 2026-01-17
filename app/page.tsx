@@ -1,79 +1,38 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import PostGenerator from '@/components/PostGenerator';
-import PostEditor from '@/components/PostEditor';
-import HashtagSuggestions from '@/components/HashtagSuggestions';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import DraftManager from '@/components/DraftManager';
 import TrendingPostsPanel from '@/components/TrendingPostsPanel';
 import SavedPostsPanel from '@/components/SavedPostsPanel';
-import HookGenerator from '@/components/HookGenerator';
-import CTAOptimizer from '@/components/CTAOptimizer';
-import CrossPlatformAdapter from '@/components/CrossPlatformAdapter';
-import CarouselGenerator from '@/components/CarouselGenerator';
 import WorkflowStepper from '@/components/WorkflowStepper';
 import FloatingActionMenu from '@/components/FloatingActionMenu';
 import Toast from '@/components/Toast';
 import LinkedInPreview from '@/components/LinkedInPreview';
+import PostContentSection from '@/components/PostContentSection';
+import EnhancementSection from '@/components/EnhancementSection';
+import ExportSection from '@/components/ExportSection';
+import PreviewStats from '@/components/PreviewStats';
 import { saveDraft, getAllDrafts } from '@/lib/storage';
 import { savePost, getAllSavedPosts, deleteSavedPost } from '@/lib/saved-posts';
 import { convertHtmlToLinkedInFormat, htmlToPlainText, plainTextToHtml } from '@/lib/linkedin-formatter';
 import { Language, Tone, PostLength, Draft, TrendingPost } from '@/types';
+import { usePostState } from '@/hooks/usePostState';
+import { useImageGeneration } from '@/hooks/useImageGeneration';
+import { useDraftsAndSaved } from '@/hooks/useDraftsAndSaved';
 
 export default function Home() {
-  const [postContent, setPostContent] = useState('');
-  const [hashtags, setHashtags] = useState<string[]>([]);
-  const [selectedHashtags, setSelectedHashtags] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [currentLanguage, setCurrentLanguage] = useState<Language>('english');
-  const [currentTone, setCurrentTone] = useState<Tone>('professional');
-  const [currentLength, setCurrentLength] = useState<PostLength>('medium');
-  const [originalContext, setOriginalContext] = useState<string>('');
-  const [generatedImage, setGeneratedImage] = useState<string | null>(null);
-  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
-  const [isGeneratingImagePrompt, setIsGeneratingImagePrompt] = useState(false);
-  const [imagePrompt, setImagePrompt] = useState<string>('');
-  const [editedImagePrompt, setEditedImagePrompt] = useState<string>('');
-  const [isImagePromptExpanded, setIsImagePromptExpanded] = useState(false);
-  const [isGeneratedImageExpanded, setIsGeneratedImageExpanded] = useState(false);
   const [inspirationContext, setInspirationContext] = useState<string>('');
-  const [savedPostIds, setSavedPostIds] = useState<Set<string>>(new Set());
   const [useUnicodeFormatting, setUseUnicodeFormatting] = useState<boolean>(true);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
-  const [draftsCount, setDraftsCount] = useState(0);
-  const [savedPostsCount, setSavedPostsCount] = useState(0);
-  const [isDraftManagerOpen, setIsDraftManagerOpen] = useState(false);
-  const [isSavedPostsOpen, setIsSavedPostsOpen] = useState(false);
-  const [enhancementTab, setEnhancementTab] = useState<'content' | 'formatting' | 'media'>('content');
 
-  // Load saved post IDs and counts on mount
-  useEffect(() => {
-    const loadSavedPostIds = async () => {
-      try {
-        const savedPosts = await getAllSavedPosts();
-        const ids = new Set(savedPosts.map(sp => sp.postId));
-        setSavedPostIds(ids);
-        setSavedPostsCount(savedPosts.length);
-      } catch (error) {
-        console.error('Failed to load saved post IDs:', error);
-      }
-    };
-    loadSavedPostIds();
-  }, []);
+  // Custom hooks for state management
+  const postState = usePostState();
+  const imageGeneration = useImageGeneration();
+  const draftsAndSaved = useDraftsAndSaved();
 
-  // Load drafts count
-  useEffect(() => {
-    const loadDraftsCount = async () => {
-      try {
-        const result = await getAllDrafts(1, 1);
-        setDraftsCount(result.pagination.total);
-      } catch (error) {
-        console.error('Failed to load drafts count:', error);
-      }
-    };
-    loadDraftsCount();
-  }, []);
+  // Initialize saved posts and drafts (handled in hooks)
 
   // Show toast for success messages
   useEffect(() => {
@@ -90,46 +49,35 @@ export default function Home() {
     }
   }, [error]);
 
-  const handlePostGenerated = (content: string, generatedHashtags: string[], language: Language, tone: Tone, length: PostLength, context: string) => {
-    // Convert plain text to HTML if it's not already HTML
-    // Simple check: if it doesn't contain HTML tags, convert it
-    let htmlContent = content;
-    if (content && !content.includes('<') && !content.includes('>')) {
-      htmlContent = plainTextToHtml(content);
-    }
-    
-    setPostContent(htmlContent);
-    setHashtags(generatedHashtags);
-    setSelectedHashtags([]);
-    setCurrentLanguage(language);
-    setCurrentTone(tone);
-    setCurrentLength(length);
-    setOriginalContext(context);
+  const handlePostGenerated = useCallback((content: string, generatedHashtags: string[], language: Language, tone: Tone, length: PostLength, context: string) => {
+    postState.handlePostGenerated(content, generatedHashtags, language, tone, length, context);
     setInspirationContext(''); // Clear inspiration context after generating
-    setImagePrompt('');
-    setEditedImagePrompt('');
-    setGeneratedImage(null);
+    imageGeneration.clearImageState();
     setError(null);
-    setIsImagePromptExpanded(false);
-    setIsGeneratedImageExpanded(false);
-  };
+  }, [postState, imageGeneration]);
 
-  const handleError = (errorMessage: string) => {
+  const handleError = useCallback((errorMessage: string) => {
     setError(errorMessage);
     setSuccess(null);
-  };
+  }, []);
 
-  const handleAddHashtag = (hashtag: string) => {
-    if (!selectedHashtags.includes(hashtag)) {
-      setSelectedHashtags([...selectedHashtags, hashtag]);
+  const handleAddHashtag = useCallback((hashtag: string) => {
+    postState.handleAddHashtag(hashtag);
+  }, [postState]);
+
+  const handleRemoveHashtag = useCallback((hashtag: string) => {
+    postState.handleRemoveHashtag(hashtag);
+  }, [postState]);
+
+  const getFinalPost = useCallback((): string => {
+    let final = convertHtmlToLinkedInFormat(postState.postContent, useUnicodeFormatting);
+    if (postState.selectedHashtags.length > 0) {
+      final += '\n\n' + postState.selectedHashtags.map((h) => `#${h}`).join(' ');
     }
-  };
+    return final;
+  }, [postState.postContent, postState.selectedHashtags, useUnicodeFormatting]);
 
-  const handleRemoveHashtag = (hashtag: string) => {
-    setSelectedHashtags(selectedHashtags.filter((h) => h !== hashtag));
-  };
-
-  const handleCopyToClipboard = async () => {
+  const handleCopyToClipboard = useCallback(async () => {
     const finalPost = getFinalPost();
     try {
       await navigator.clipboard.writeText(finalPost);
@@ -138,9 +86,9 @@ export default function Home() {
     } catch (err) {
       setToast({ message: 'Failed to copy to clipboard', type: 'error' });
     }
-  };
+  }, [getFinalPost]);
 
-  const handleExport = () => {
+  const handleExport = useCallback(() => {
     const finalPost = getFinalPost();
     const blob = new Blob([finalPost], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
@@ -153,85 +101,46 @@ export default function Home() {
     URL.revokeObjectURL(url);
     setToast({ message: 'Post exported!', type: 'success' });
     setError(null);
-  };
+  }, [getFinalPost]);
 
-  const handleSaveDraft = async () => {
-    if (!postContent.trim()) {
-      setToast({ message: 'No content to save', type: 'error' });
-      return;
-    }
-
-    try {
-      // Get plain text title from HTML content
-      const plainTextContent = htmlToPlainText(postContent);
-      const title = plainTextContent.substring(0, 50) || 'Untitled Draft';
-      await saveDraft({
-        title,
-        content: postContent, // Save as HTML
-        language: currentLanguage,
-        tone: currentTone,
-        length: currentLength,
-        hashtags: selectedHashtags,
-        generatedImage: generatedImage || null,
-        imagePrompt: imagePrompt || undefined,
-        editedImagePrompt: editedImagePrompt || undefined,
-        originalContext: originalContext || undefined,
-      });
-      setToast({ message: 'Draft saved!', type: 'success' });
-      // Update drafts count
-      const result = await getAllDrafts(1, 1);
-      setDraftsCount(result.pagination.total);
-    } catch (err) {
-      setToast({ message: 'Failed to save draft. Please try again.', type: 'error' });
-    }
-  };
-
-  const handleLoadDraft = (draft: Draft) => {
+  const handleLoadDraft = useCallback((draft: Draft) => {
     // Handle backward compatibility: convert plain text to HTML if needed
     let content = draft.content;
     
     // Check if content is plain text (doesn't contain HTML tags)
-    // Simple heuristic: if it doesn't contain < and >, it's likely plain text
     if (content && !content.includes('<') && !content.includes('>')) {
       content = plainTextToHtml(content);
     }
     
-    setPostContent(content);
-    setHashtags(draft.hashtags);
-    setSelectedHashtags(draft.hashtags);
-    setCurrentLanguage(draft.language);
-    setCurrentTone(draft.tone);
-    setCurrentLength(draft.length);
-    setOriginalContext(draft.originalContext || '');
-    setGeneratedImage(draft.generatedImage || null);
-    setImagePrompt(draft.imagePrompt || '');
-    setEditedImagePrompt(draft.editedImagePrompt || draft.imagePrompt || '');
+    postState.setPostContent(content);
+    postState.setHashtags(draft.hashtags);
+    postState.setSelectedHashtags(draft.hashtags);
+    postState.setCurrentLanguage(draft.language);
+    postState.setCurrentTone(draft.tone);
+    postState.setCurrentLength(draft.length);
+    postState.setOriginalContext(draft.originalContext || '');
+    imageGeneration.setGeneratedImage(draft.generatedImage || null);
+    imageGeneration.setImagePrompt(draft.imagePrompt || '');
+    imageGeneration.setEditedImagePrompt(draft.editedImagePrompt || draft.imagePrompt || '');
     setError(null);
     setToast({ message: 'Draft loaded!', type: 'success' });
-  };
+  }, [postState, imageGeneration]);
 
-  const handleClear = () => {
+  const handleClear = useCallback(() => {
     if (confirm('Are you sure you want to clear all content?')) {
-      setPostContent('');
-      setHashtags([]);
-      setSelectedHashtags([]);
-      setOriginalContext('');
-      setGeneratedImage(null);
-      setImagePrompt('');
-      setEditedImagePrompt('');
+      postState.handleClear();
+      imageGeneration.clearImageState();
       setError(null);
       setSuccess(null);
     }
-  };
+  }, [postState, imageGeneration]);
 
-  const handleUseAsInspiration = (post: TrendingPost) => {
-    // Use the trending post content as context for generating a new post
+  const handleUseAsInspiration = useCallback((post: TrendingPost) => {
     const inspirationText = `Inspired by this trending post:\n\n${post.content}\n\nCreate a similar but original post on this topic.`;
     setInspirationContext(inspirationText);
-    setOriginalContext(inspirationText);
+    postState.setOriginalContext(inspirationText);
     setSuccess('Post loaded as inspiration! Review and edit the context, then click Generate Post.');
     setError(null);
-    // Scroll to the post generator
     setTimeout(() => {
       const textarea = document.querySelector('#context') as HTMLTextAreaElement;
       if (textarea) {
@@ -239,195 +148,29 @@ export default function Home() {
         textarea.focus();
       }
     }, 100);
-  };
+  }, [postState]);
 
-  const handleSavePost = async (post: TrendingPost) => {
-    // Optimistic update: add to saved posts immediately
-    const wasAlreadySaved = savedPostIds.has(post.id);
-    
-    if (!wasAlreadySaved) {
-      setSavedPostIds(prev => new Set([...prev, post.id]));
-    }
+  const handleSavePost = useCallback(async (post: TrendingPost) => {
+    await draftsAndSaved.handleSavePost(
+      post,
+      () => setToast({ message: 'Post saved! You can find it in Saved Posts.', type: 'success' }),
+      (err) => setToast({ message: 'Failed to save post. Please try again.', type: 'error' })
+    );
+  }, [draftsAndSaved]);
 
-    try {
-      await savePost(post);
-      if (!wasAlreadySaved) {
-        setToast({ message: 'Post saved! You can find it in Saved Posts.', type: 'success' });
-        const savedPosts = await getAllSavedPosts();
-        setSavedPostsCount(savedPosts.length);
-      }
-    } catch (err) {
-      // Rollback on failure
-      if (!wasAlreadySaved) {
-        setSavedPostIds(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(post.id);
-          return newSet;
-        });
-      }
-      setToast({ message: 'Failed to save post. Please try again.', type: 'error' });
-    }
-  };
+  const handleDeleteSavedPost = useCallback(async (postId: string) => {
+    await draftsAndSaved.handleDeleteSavedPost(postId);
+  }, [draftsAndSaved]);
 
-  const handleDeleteSavedPost = async (postId: string) => {
-    try {
-      const success = await deleteSavedPost(postId);
-      if (success) {
-        setSavedPostIds(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(postId);
-          return newSet;
-        });
-      }
-    } catch (err) {
-      console.error('Failed to delete saved post:', err);
-    }
-  };
 
-  const handleGenerateImagePrompt = async () => {
-    if (!postContent.trim()) {
-      setError('Please generate a post first');
-      return;
-    }
-
-    setIsGeneratingImagePrompt(true);
-    setError(null);
-    setSuccess('Analyzing post content and generating image prompt...');
-
-    try {
-      // Get API key from environment (we'll need to pass it from the server)
-      const response = await fetch('/api/generate-image-prompt', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          postContent,
-          language: currentLanguage,
-          tone: currentTone,
-          context: originalContext,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `API error: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      const generatedPrompt = data.prompt;
-
-      if (!generatedPrompt) {
-        throw new Error('No prompt generated');
-      }
-
-      setImagePrompt(generatedPrompt);
-      setEditedImagePrompt(generatedPrompt);
-      setIsImagePromptExpanded(true);
-      setSuccess('Image prompt generated! Review and edit if needed, then click Generate Image.');
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to generate prompt';
-      setError(errorMessage);
-    } finally {
-      setIsGeneratingImagePrompt(false);
-    }
-  };
-
-  const handleGenerateImage = async () => {
-    if (!postContent.trim()) {
-      setError('Please generate a post first');
-      return;
-    }
-
-    // Use edited prompt if available, otherwise generate a new one using AI
-    let promptToUse = editedImagePrompt.trim();
-    
-    if (!promptToUse) {
-      // If no edited prompt, generate one using AI
-      setSuccess('Generating image prompt with AI...');
-      try {
-        const promptResponse = await fetch('/api/generate-image-prompt', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            postContent,
-            language: currentLanguage,
-            tone: currentTone,
-            context: originalContext,
-          }),
-        });
-
-        if (!promptResponse.ok) {
-          const errorData = await promptResponse.json().catch(() => ({}));
-          throw new Error(errorData.error || 'Failed to generate prompt');
-        }
-
-        const promptData = await promptResponse.json();
-        promptToUse = promptData.prompt;
-        setImagePrompt(promptToUse);
-        setEditedImagePrompt(promptToUse);
-        setIsImagePromptExpanded(true);
-      } catch (error) {
-        setError('Failed to generate image prompt');
-        return;
-      }
-    }
-
-    setIsGeneratingImage(true);
-    setIsGeneratedImageExpanded(true);
-    setError(null);
-    setSuccess(null);
-
-    try {
-      const response = await fetch('/api/generate-image', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ imagePrompt: promptToUse }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `API error: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      
-      if (data.imageUrl) {
-        setGeneratedImage(data.imageUrl);
-        setIsGeneratedImageExpanded(true);
-        setSuccess('Image generated successfully!');
-      } else {
-        throw new Error('No image URL received');
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to generate image';
-      setError(errorMessage);
-    } finally {
-      setIsGeneratingImage(false);
-    }
-  };
-
-  const getFinalPost = (): string => {
-    // Convert HTML to LinkedIn-compatible format
-    let final = convertHtmlToLinkedInFormat(postContent, useUnicodeFormatting);
-    if (selectedHashtags.length > 0) {
-      final += '\n\n' + selectedHashtags.map((h) => `#${h}`).join(' ');
-    }
-    return final;
-  };
-
-  const getCurrentStep = (): 'generate' | 'edit' | 'enhance' | 'export' => {
-    if (!postContent) return 'generate';
-    if (postContent && !hashtags.length) return 'edit';
-    if (postContent && hashtags.length && selectedHashtags.length === 0) return 'enhance';
+  const getCurrentStep = useCallback((): 'generate' | 'edit' | 'enhance' | 'export' => {
+    if (!postState.postContent) return 'generate';
+    if (postState.postContent && !postState.hashtags.length) return 'edit';
+    if (postState.postContent && postState.hashtags.length && postState.selectedHashtags.length === 0) return 'enhance';
     return 'export';
-  };
+  }, [postState]);
 
-  const handleStepClick = (step: 'generate' | 'edit' | 'enhance' | 'export') => {
+  const handleStepClick = useCallback((step: 'generate' | 'edit' | 'enhance' | 'export') => {
     const elementId = step === 'generate' ? 'generate-section' : 
                      step === 'edit' ? 'edit-section' :
                      step === 'enhance' ? 'enhance-section' : 'export-section';
@@ -435,7 +178,12 @@ export default function Home() {
     if (element) {
       element.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
-  };
+  }, []);
+
+  const currentStep = useMemo(() => getCurrentStep(), [getCurrentStep]);
+  
+  // Memoize character count calculation
+  const characterCount = useMemo(() => htmlToPlainText(postState.postContent).length, [postState.postContent]);
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
@@ -449,7 +197,7 @@ export default function Home() {
           </p>
           
           {/* Workflow Stepper */}
-          <WorkflowStepper currentStep={getCurrentStep()} onStepClick={handleStepClick} />
+          <WorkflowStepper currentStep={currentStep} onStepClick={handleStepClick} />
         </header>
 
         {/* Critical Error Messages (stay at top) */}
@@ -473,498 +221,53 @@ export default function Home() {
           />
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
-          <div className="space-y-6" id="generate-section">
-            <div className="bg-white p-6 sm:p-8 rounded-xl shadow-md border border-gray-200/50 card-hover">
-              <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-                <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
-                Generate Post
-              </h2>
-              <PostGenerator
-                onPostGenerated={handlePostGenerated}
-                onError={handleError}
-                initialContext={inspirationContext}
-              />
-            </div>
-
-            {hashtags.length > 0 && (
-              <div className="bg-white p-6 sm:p-8 rounded-xl shadow-md border border-gray-200/50 card-hover">
-                <HashtagSuggestions
-                  hashtags={hashtags}
-                  onAddHashtag={handleAddHashtag}
-                  onRemoveHashtag={handleRemoveHashtag}
-                  selectedHashtags={selectedHashtags}
-                />
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-6" id="edit-section">
-            <div className="bg-white p-6 sm:p-8 rounded-xl shadow-md border border-gray-200/50 card-hover">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                  <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  Generated Post
-                </h2>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={handleSaveDraft}
-                    disabled={!postContent.trim()}
-                    className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed transition-all duration-200 font-medium"
-                  >
-                    Save Draft
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleClear}
-                    className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-all duration-200 font-medium"
-                  >
-                    Clear
-                  </button>
-                </div>
-              </div>
-              <PostEditor
-                content={postContent}
-                onChange={setPostContent}
-                placeholder="Generated post will appear here..."
-                language={currentLanguage}
-              />
-            </div>
-          </div>
-        </div>
+        <PostContentSection
+          postContent={postState.postContent}
+          hashtags={postState.hashtags}
+          selectedHashtags={postState.selectedHashtags}
+          currentLanguage={postState.currentLanguage}
+          currentTone={postState.currentTone}
+          currentLength={postState.currentLength}
+          inspirationContext={inspirationContext}
+          onPostGenerated={handlePostGenerated}
+          onPostContentChange={postState.setPostContent}
+          onHashtagAdd={handleAddHashtag}
+          onHashtagRemove={handleRemoveHashtag}
+          onError={handleError}
+          onClear={handleClear}
+          onLoadDraft={handleLoadDraft}
+          onToast={(msg, type) => setToast({ message: msg, type })}
+          onDraftsCountUpdate={draftsAndSaved.setDraftsCount}
+          generatedImage={imageGeneration.generatedImage}
+          imagePrompt={imageGeneration.imagePrompt}
+          editedImagePrompt={imageGeneration.editedImagePrompt}
+          originalContext={postState.originalContext}
+        />
 
         {/* Enhance & Export Sections */}
-        {postContent && (
+        {postState.postContent && (
           <>
-            {/* Actions & Export Section */}
-            <div id="export-section" className="mt-8 lg:mt-10">
-              <div className="bg-white p-6 sm:p-8 rounded-xl shadow-md border border-gray-200/50 card-hover">
-                <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-                  <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                  Export & Actions
-                </h3>
-                
-                <div className="space-y-4">
-                  {/* Primary Actions */}
-                  <div>
-                    <h4 className="text-sm font-semibold text-gray-700 mb-3">Primary Actions</h4>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <button
-                        type="button"
-                        onClick={handleCopyToClipboard}
-                        className="btn-primary bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200/50 flex items-center justify-center gap-2 w-full"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                        </svg>
-                        <span className="whitespace-nowrap">Copy to Clipboard</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleExport}
-                        className="btn-primary bg-green-600 text-white hover:bg-green-700 shadow-green-200/50 flex items-center justify-center gap-2 w-full"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
-                        <span className="whitespace-nowrap">Export as Text</span>
-                      </button>
-                    </div>
-                  </div>
+            <ExportSection
+              postContent={postState.postContent}
+              selectedHashtags={postState.selectedHashtags}
+              useUnicodeFormatting={useUnicodeFormatting}
+              setUseUnicodeFormatting={setUseUnicodeFormatting}
+              imageGeneration={imageGeneration}
+              currentLanguage={postState.currentLanguage}
+              currentTone={postState.currentTone}
+              originalContext={postState.originalContext}
+              setSuccess={(msg) => setSuccess(msg)}
+              setError={(msg) => setError(msg)}
+            />
 
-                  {/* Image Generation */}
-                  <div className="pt-4 border-t border-gray-200">
-                    <h4 className="text-sm font-semibold text-gray-700 mb-3">Image Generation</h4>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <button
-                        type="button"
-                        onClick={handleGenerateImagePrompt}
-                        disabled={!postContent.trim() || isGeneratingImagePrompt}
-                        className="btn-primary bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200/50 disabled:bg-gray-400 flex items-center justify-center gap-2 w-full"
-                      >
-                        {isGeneratingImagePrompt ? (
-                          <>
-                            <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                            <span className="whitespace-nowrap">Generating...</span>
-                          </>
-                        ) : (
-                          <>
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h10m-7 4h7" />
-                            </svg>
-                            <span className="whitespace-nowrap">Generate Image Prompt</span>
-                          </>
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleGenerateImage}
-                        disabled={isGeneratingImage || isGeneratingImagePrompt || !editedImagePrompt.trim()}
-                        className="btn-primary bg-purple-600 text-white hover:bg-purple-700 shadow-purple-200/50 disabled:bg-gray-400 flex items-center justify-center gap-2 w-full"
-                      >
-                        {isGeneratingImage ? (
-                          <>
-                            <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                            <span className="whitespace-nowrap">Generating...</span>
-                          </>
-                        ) : (
-                          <>
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
-                            <span className="whitespace-nowrap">Generate Image</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Settings */}
-                  <div className="pt-4 border-t border-gray-200">
-                    <h4 className="text-sm font-semibold text-gray-700 mb-3">Settings</h4>
-                    <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={useUnicodeFormatting}
-                          onChange={(e) => setUseUnicodeFormatting(e.target.checked)}
-                          className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                        />
-                        <div className="flex-1">
-                          <span className="text-sm font-medium text-gray-900">Use Unicode Formatting</span>
-                          <p className="text-xs text-gray-600 mt-0.5">
-                            {useUnicodeFormatting 
-                              ? 'Bold/italic will use Unicode characters. Note: Arabic/Kurdish bold may not render correctly in LinkedIn.'
-                              : 'Plain text only (better for accessibility and search)'}
-                          </p>
-                        </div>
-                      </label>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-                {/* Collapsible Image Prompt Section */}
-                {editedImagePrompt && (
-                  <div className="bg-white rounded-xl shadow-md border border-gray-200/50 card-hover overflow-hidden h-fit">
-                    <button
-                      type="button"
-                      onClick={() => setIsImagePromptExpanded(!isImagePromptExpanded)}
-                      className="w-full p-6 sm:p-8 flex items-center justify-between hover:bg-gray-50 transition-colors duration-200"
-                    >
-                      <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                        <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h10m-7 4h7" />
-                        </svg>
-                        Image Generation Prompt
-                      </h3>
-                      <svg
-                        className={`w-5 h-5 text-gray-500 transition-transform duration-300 ${isImagePromptExpanded ? 'rotate-180' : ''}`}
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </button>
-                    <div
-                      className={`overflow-hidden transition-all duration-300 ease-in-out ${
-                        isImagePromptExpanded ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0'
-                      }`}
-                    >
-                      <div className="px-6 sm:px-8 pb-6 sm:pb-8 border-t border-gray-200">
-                        <label htmlFor="image-prompt" className="block text-sm font-semibold text-gray-900 mb-3">
-                          Edit the prompt to customize the image generation:
-                        </label>
-                        <textarea
-                          id="image-prompt"
-                          value={editedImagePrompt}
-                          onChange={(e) => setEditedImagePrompt(e.target.value)}
-                          className="w-full min-h-[150px] px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 resize-y text-sm font-mono bg-gray-50 input-focus"
-                          placeholder="Image prompt will appear here..."
-                        />
-                        <p className="text-xs text-gray-500 mt-2">
-                          Edit the prompt above to customize the image generation, then click "Generate Image"
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Collapsible Generated Image Section */}
-                {(isGeneratingImage || generatedImage) && (
-                  <div className="bg-white rounded-xl shadow-md border border-gray-200/50 card-hover overflow-hidden h-fit">
-                    <button
-                      type="button"
-                      onClick={() => setIsGeneratedImageExpanded(!isGeneratedImageExpanded)}
-                      className="w-full p-6 sm:p-8 flex items-center justify-between hover:bg-gray-50 transition-colors duration-200"
-                    >
-                      <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                        <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                        Generated Image
-                      </h3>
-                      <svg
-                        className={`w-5 h-5 text-gray-500 transition-transform duration-300 ${isGeneratedImageExpanded ? 'rotate-180' : ''}`}
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </button>
-                    <div
-                      className={`overflow-hidden transition-all duration-300 ease-in-out ${
-                        isGeneratedImageExpanded ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
-                      }`}
-                    >
-                      <div className="px-6 sm:px-8 pb-6 sm:pb-8 border-t border-gray-200">
-                        {isGeneratingImage && !generatedImage ? (
-                          <div className="flex flex-col items-center justify-center py-12 bg-gray-50 rounded-xl border-2 border-dashed border-gray-300 mt-4">
-                            <svg className="animate-spin h-8 w-8 text-purple-600 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                            <p className="text-sm font-medium text-gray-700">Generating your image...</p>
-                            <p className="text-xs text-gray-500 mt-1">This may take a few moments</p>
-                          </div>
-                        ) : generatedImage ? (
-                          <>
-                            <div className="relative group mt-4">
-                              <div className="rounded-xl overflow-hidden shadow-lg border border-gray-200 bg-gray-50">
-                                <img
-                                  src={generatedImage}
-                                  alt="Generated LinkedIn post image"
-                                  className="w-full h-auto"
-                                  onError={() => {
-                                    setError('Failed to load image. The image URL might be invalid.');
-                                    setGeneratedImage(null);
-                                  }}
-                                />
-                              </div>
-                              <div className="mt-4 flex flex-wrap gap-3">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (generatedImage.startsWith('data:')) {
-                                      // Handle base64 data URL
-                                      const link = document.createElement('a');
-                                      link.href = generatedImage;
-                                      link.download = 'linkedin-post-image.png';
-                                      document.body.appendChild(link);
-                                      link.click();
-                                      document.body.removeChild(link);
-                                    } else {
-                                      // Handle regular URL
-                                      const link = document.createElement('a');
-                                      link.href = generatedImage;
-                                      link.download = 'linkedin-post-image.png';
-                                      link.target = '_blank';
-                                      document.body.appendChild(link);
-                                      link.click();
-                                      document.body.removeChild(link);
-                                    }
-                                    setSuccess('Image download started!');
-                                  }}
-                                  className="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-all duration-200 font-medium flex items-center gap-2"
-                                >
-                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                  </svg>
-                                  Download Image
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    navigator.clipboard.writeText(generatedImage);
-                                    setSuccess('Image URL copied to clipboard!');
-                                  }}
-                                  className="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-all duration-200 font-medium flex items-center gap-2"
-                                >
-                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                  </svg>
-                                  Copy Image URL
-                                </button>
-                              </div>
-                            </div>
-                          </>
-                        ) : null}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-            {/* Enhancement Tools Section */}
-            <div id="enhance-section" className="mt-8 lg:mt-10">
-              <div className="bg-white p-6 sm:p-8 rounded-xl shadow-md border border-gray-200/50 card-hover">
-                <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-                  <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                  Post Enhancements
-                </h3>
-
-                {/* Tabs */}
-                <div className="flex border-b border-gray-200 mb-6 overflow-x-auto">
-                  <button
-                    type="button"
-                    onClick={() => setEnhancementTab('content')}
-                    className={`px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${
-                      enhancementTab === 'content'
-                        ? 'border-b-2 border-purple-600 text-purple-600'
-                        : 'text-gray-600 hover:text-gray-900'
-                    }`}
-                  >
-                    Content
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEnhancementTab('formatting')}
-                    className={`px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${
-                      enhancementTab === 'formatting'
-                        ? 'border-b-2 border-purple-600 text-purple-600'
-                        : 'text-gray-600 hover:text-gray-900'
-                    }`}
-                  >
-                    Formatting
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEnhancementTab('media')}
-                    className={`px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${
-                      enhancementTab === 'media'
-                        ? 'border-b-2 border-purple-600 text-purple-600'
-                        : 'text-gray-600 hover:text-gray-900'
-                    }`}
-                  >
-                    Media
-                  </button>
-                </div>
-
-                {/* Tab Content */}
-                <div className="space-y-4">
-                  {enhancementTab === 'content' && (
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                      <HookGenerator
-                        postContent={postContent}
-                        language={currentLanguage}
-                        tone={currentTone}
-                        onHookSelected={(newContent) => {
-                          setPostContent(newContent);
-                          setToast({ message: 'Hook applied to post!', type: 'success' });
-                        }}
-                      />
-                      <CTAOptimizer
-                        postContent={postContent}
-                        language={currentLanguage}
-                        tone={currentTone}
-                        onCTASelected={(newContent, position) => {
-                          setPostContent(newContent);
-                          setToast({ message: 'CTA inserted into post!', type: 'success' });
-                        }}
-                      />
-                    </div>
-                  )}
-
-                  {enhancementTab === 'formatting' && (
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                      <CrossPlatformAdapter
-                        postContent={postContent}
-                        language={currentLanguage}
-                      />
-                      <CarouselGenerator
-                        postContent={postContent}
-                        language={currentLanguage}
-                        tone={currentTone}
-                        onCarouselSelected={(newContent) => {
-                          setPostContent(newContent);
-                          setToast({ message: 'Carousel applied to post!', type: 'success' });
-                        }}
-                      />
-                    </div>
-                  )}
-
-                  {enhancementTab === 'media' && (
-                    <div className="space-y-4">
-                      {/* Image Prompt Section */}
-                      {editedImagePrompt && (
-                        <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                          <h4 className="text-sm font-semibold text-gray-900 mb-2">Image Generation Prompt</h4>
-                          <textarea
-                            value={editedImagePrompt}
-                            onChange={(e) => setEditedImagePrompt(e.target.value)}
-                            className="w-full min-h-[100px] px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 resize-y text-sm font-mono bg-white"
-                            placeholder="Image prompt will appear here..."
-                          />
-                        </div>
-                      )}
-
-                      {/* Generated Image Section */}
-                      {generatedImage && (
-                        <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                          <h4 className="text-sm font-semibold text-gray-900 mb-3">Generated Image</h4>
-                          <div className="rounded-lg overflow-hidden shadow-md border border-gray-200 bg-white">
-                            <img
-                              src={generatedImage}
-                              alt="Generated LinkedIn post image"
-                              className="w-full h-auto"
-                              onError={() => {
-                                setToast({ message: 'Failed to load image. The image URL might be invalid.', type: 'error' });
-                                setGeneratedImage(null);
-                              }}
-                            />
-                          </div>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const link = document.createElement('a');
-                                link.href = generatedImage;
-                                link.download = 'linkedin-post-image.png';
-                                link.target = '_blank';
-                                document.body.appendChild(link);
-                                link.click();
-                                document.body.removeChild(link);
-                                setToast({ message: 'Image download started!', type: 'success' });
-                              }}
-                              className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
-                            >
-                              Download
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                navigator.clipboard.writeText(generatedImage);
-                                setToast({ message: 'Image URL copied to clipboard!', type: 'success' });
-                              }}
-                              className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
-                            >
-                              Copy URL
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
+            <EnhancementSection
+              postContent={postState.postContent}
+              currentLanguage={postState.currentLanguage}
+              currentTone={postState.currentTone}
+              imageGeneration={imageGeneration}
+              onPostContentChange={postState.setPostContent}
+              onToast={(msg, type) => setToast({ message: msg, type })}
+            />
           </>
         )}
 
@@ -973,12 +276,12 @@ export default function Home() {
           <TrendingPostsPanel 
             onUseAsInspiration={handleUseAsInspiration}
             onSavePost={handleSavePost}
-            savedPostIds={savedPostIds}
+            savedPostIds={draftsAndSaved.savedPostIds}
           />
         </div>
 
         {/* Enhanced Preview Section */}
-        {postContent && (
+        {postState.postContent && (
           <div className="mt-8 lg:mt-10">
             <div className="bg-white p-6 sm:p-8 rounded-xl shadow-md border border-gray-200/50 card-hover">
               <div className="flex items-center justify-between mb-6">
@@ -989,16 +292,16 @@ export default function Home() {
                   </svg>
                   LinkedIn Preview
                 </h3>
-                <div className="text-sm text-gray-600">
-                  {htmlToPlainText(postContent).length} characters
-                  {selectedHashtags.length > 0 && ` • ${selectedHashtags.length} hashtag${selectedHashtags.length !== 1 ? 's' : ''}`}
-                </div>
+                <PreviewStats 
+                  content={postState.postContent}
+                  selectedHashtags={postState.selectedHashtags}
+                />
               </div>
               <LinkedInPreview
-                content={postContent}
-                hashtags={selectedHashtags}
-                language={currentLanguage}
-                characterCount={htmlToPlainText(postContent).length}
+                content={postState.postContent}
+                hashtags={postState.selectedHashtags}
+                language={postState.currentLanguage}
+                characterCount={characterCount}
               />
             </div>
           </div>
@@ -1007,39 +310,34 @@ export default function Home() {
 
       {/* Floating Action Menu (Mobile) */}
       <FloatingActionMenu
-        onDraftsClick={() => setIsDraftManagerOpen(true)}
-        onSavedPostsClick={() => setIsSavedPostsOpen(true)}
-        onCopyClick={postContent ? handleCopyToClipboard : undefined}
-        onExportClick={postContent ? handleExport : undefined}
-        draftsCount={draftsCount}
-        savedPostsCount={savedPostsCount}
-        canCopy={!!postContent}
-        canExport={!!postContent}
+        onDraftsClick={() => draftsAndSaved.setIsDraftManagerOpen(true)}
+        onSavedPostsClick={() => draftsAndSaved.setIsSavedPostsOpen(true)}
+        onCopyClick={postState.postContent ? handleCopyToClipboard : undefined}
+        onExportClick={postState.postContent ? handleExport : undefined}
+        draftsCount={draftsAndSaved.draftsCount}
+        savedPostsCount={draftsAndSaved.savedPostsCount}
+        canCopy={!!postState.postContent}
+        canExport={!!postState.postContent}
       />
 
       {/* Draft Manager */}
       <DraftManager 
         onLoadDraft={(draft) => {
           handleLoadDraft(draft);
-          setIsDraftManagerOpen(false);
+          draftsAndSaved.setIsDraftManagerOpen(false);
         }}
-        isOpen={isDraftManagerOpen}
-        onClose={() => setIsDraftManagerOpen(false)}
+        isOpen={draftsAndSaved.isDraftManagerOpen}
+        onClose={() => draftsAndSaved.setIsDraftManagerOpen(false)}
       />
 
       {/* Saved Posts Panel */}
       <SavedPostsPanel 
         onUseAsInspiration={handleUseAsInspiration}
         onPostDeleted={() => {
-          // Reload saved post IDs when a post is deleted
-          getAllSavedPosts().then(savedPosts => {
-            const ids = new Set(savedPosts.map(sp => sp.postId));
-            setSavedPostIds(ids);
-            setSavedPostsCount(savedPosts.length);
-          });
+          draftsAndSaved.refreshSavedPostIds();
         }}
-        isOpen={isSavedPostsOpen}
-        onClose={() => setIsSavedPostsOpen(false)}
+        isOpen={draftsAndSaved.isSavedPostsOpen}
+        onClose={() => draftsAndSaved.setIsSavedPostsOpen(false)}
       />
     </main>
   );

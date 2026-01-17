@@ -1,6 +1,8 @@
-import { neon } from '@neondatabase/serverless';
+import { neon, NeonQueryFunction } from '@neondatabase/serverless';
+import { TrendingPostsCacheRow, SavedPostRow, CustomToneRow, TrendingPost, CustomTone, ToneMix } from '@/types';
+import { logger } from '@/lib/utils/logger';
 
-let sqlInstance: any = null;
+let sqlInstance: NeonQueryFunction<false, false> | null = null;
 
 function getSql() {
   if (!process.env.DATABASE_URL) {
@@ -15,7 +17,7 @@ function getSql() {
 }
 
 // Create a function that can be used as a tagged template literal
-const sqlFunction = function sql(strings: TemplateStringsArray, ...values: any[]) {
+const sqlFunction = function sql(strings: TemplateStringsArray, ...values: unknown[]) {
   return getSql()(strings, ...values);
 };
 
@@ -62,12 +64,12 @@ export async function ensureTrendingPostsCacheTable() {
     `;
   } catch (error) {
     // Table might already exist, which is fine
-    console.error('Error ensuring trending_posts_cache table:', error);
+    logger.error('Error ensuring trending_posts_cache table:', error);
   }
 }
 
 // Get cached trending posts
-export async function getCachedTrendingPosts(searchQuery: string) {
+export async function getCachedTrendingPosts(searchQuery: string): Promise<TrendingPostsCacheRow | null> {
   try {
     const result = await sql`
       SELECT 
@@ -82,11 +84,11 @@ export async function getCachedTrendingPosts(searchQuery: string) {
       LIMIT 1
     `;
     
-    const cached = Array.isArray(result) && result.length > 0 ? result[0] : null;
+    const cached = Array.isArray(result) && result.length > 0 ? (result[0] as TrendingPostsCacheRow) : null;
     
     return cached;
   } catch (error) {
-    console.error('[DB Cache] Error getting cached trending posts:', error);
+    logger.error('[DB Cache] Error getting cached trending posts:', error);
     return null;
   }
 }
@@ -94,10 +96,18 @@ export async function getCachedTrendingPosts(searchQuery: string) {
 // Save trending posts to cache
 export async function saveTrendingPostsCache(
   searchQuery: string,
-  postsData: any,
-  engagementSummary: any,
+  postsData: TrendingPost[],
+  engagementSummary: {
+    totalPosts: number;
+    avgLikes: number;
+    avgComments: number;
+    avgShares: number;
+    avgTotalEngagement: number;
+    totalHashtags: Record<string, number>;
+    postTypeDistribution: Record<string, number>;
+  } | null,
   expirationHours: number = 12
-) {
+): Promise<void> {
   try {
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + expirationHours);
@@ -122,7 +132,7 @@ export async function saveTrendingPostsCache(
         expires_at = ${expiresAt.toISOString()}
     `;
   } catch (error) {
-    console.error('Error saving trending posts cache:', error);
+    logger.error('Error saving trending posts cache:', error);
     throw error;
   }
 }
@@ -135,7 +145,7 @@ export async function cleanupExpiredTrendingPostsCache() {
       WHERE expires_at < NOW()
     `;
   } catch (error) {
-    console.error('Error cleaning up expired cache:', error);
+    logger.error('Error cleaning up expired cache:', error);
   }
 }
 
@@ -147,7 +157,7 @@ export async function deleteCachedTrendingPosts(searchQuery: string) {
       WHERE search_query = ${searchQuery}
     `;
   } catch (error) {
-    console.error('[DB Cache] Error deleting cache entry:', error);
+    logger.error('[DB Cache] Error deleting cache entry:', error);
   }
 }
 
@@ -164,12 +174,12 @@ export async function ensureSavedTrendingPostsTable() {
       )
     `;
   } catch (error) {
-    console.error('Error ensuring saved_trending_posts table:', error);
+    logger.error('Error ensuring saved_trending_posts table:', error);
   }
 }
 
 // Save a trending post
-export async function saveTrendingPost(post: any, notes?: string) {
+export async function saveTrendingPost(post: TrendingPost, notes?: string): Promise<SavedPostRow | null> {
   try {
     await ensureSavedTrendingPostsTable();
     const result = await sql`
@@ -194,15 +204,15 @@ export async function saveTrendingPost(post: any, notes?: string) {
         saved_at,
         notes
     `;
-    return Array.isArray(result) && result.length > 0 ? result[0] : null;
+    return Array.isArray(result) && result.length > 0 ? (result[0] as SavedPostRow) : null;
   } catch (error) {
-    console.error('Error saving trending post:', error);
+    logger.error('Error saving trending post:', error);
     throw error;
   }
 }
 
 // Get all saved trending posts
-export async function getAllSavedTrendingPosts() {
+export async function getAllSavedTrendingPosts(): Promise<SavedPostRow[]> {
   try {
     await ensureSavedTrendingPostsTable();
     const result = await sql`
@@ -215,9 +225,9 @@ export async function getAllSavedTrendingPosts() {
       FROM saved_trending_posts
       ORDER BY saved_at DESC
     `;
-    return Array.isArray(result) ? result : [];
+    return Array.isArray(result) ? (result as SavedPostRow[]) : [];
   } catch (error) {
-    console.error('Error getting saved trending posts:', error);
+    logger.error('Error getting saved trending posts:', error);
     return [];
   }
 }
@@ -231,7 +241,7 @@ export async function deleteSavedTrendingPost(postId: string) {
       WHERE post_id = ${postId}
     `;
   } catch (error) {
-    console.error('Error deleting saved trending post:', error);
+    logger.error('Error deleting saved trending post:', error);
     throw error;
   }
 }
@@ -248,7 +258,7 @@ export async function isPostSaved(postId: string) {
     `;
     return Array.isArray(result) && result.length > 0;
   } catch (error) {
-    console.error('Error checking if post is saved:', error);
+    logger.error('Error checking if post is saved:', error);
     return false;
   }
 }
@@ -260,10 +270,10 @@ export async function ensureCustomTonesTable() {
       SELECT EXISTS (
         SELECT FROM information_schema.tables 
         WHERE table_name = 'custom_tones'
-      )
+      ) as exists
     `;
     
-    const exists = Array.isArray(tableExists) && tableExists.length > 0 && (tableExists[0] as any).exists;
+    const exists = Array.isArray(tableExists) && tableExists.length > 0 && (tableExists[0] as { exists: boolean }).exists;
     
     if (!exists) {
       await sql`
@@ -283,7 +293,7 @@ export async function ensureCustomTonesTable() {
       await seedIndustryPresets();
     }
   } catch (error) {
-    console.error('Error ensuring custom_tones table:', error);
+    logger.error('Error ensuring custom_tones table:', error);
   }
 }
 
@@ -294,8 +304,8 @@ export async function createCustomTone(data: {
   descriptionKurdish: string;
   industry?: string;
   isPreset?: boolean;
-  toneMix?: { tone: string; percentage: number }[];
-}) {
+  toneMix?: ToneMix[];
+}): Promise<CustomTone | null> {
   try {
     await ensureCustomTonesTable();
     const result = await sql`
@@ -325,15 +335,15 @@ export async function createCustomTone(data: {
         created_at as "createdAt",
         updated_at as "updatedAt"
     `;
-    return Array.isArray(result) && result.length > 0 ? result[0] : null;
+    return Array.isArray(result) && result.length > 0 ? (result[0] as CustomTone) : null;
   } catch (error) {
-    console.error('Error creating custom tone:', error);
+    logger.error('Error creating custom tone:', error);
     throw error;
   }
 }
 
 // Get a custom tone by ID
-export async function getCustomTone(id: number) {
+export async function getCustomTone(id: number): Promise<CustomTone | null> {
   try {
     await ensureCustomTonesTable();
     const result = await sql`
@@ -351,15 +361,15 @@ export async function getCustomTone(id: number) {
       WHERE id = ${id}
       LIMIT 1
     `;
-    return Array.isArray(result) && result.length > 0 ? result[0] : null;
+    return Array.isArray(result) && result.length > 0 ? (result[0] as CustomTone) : null;
   } catch (error) {
-    console.error('Error getting custom tone:', error);
+    logger.error('Error getting custom tone:', error);
     return null;
   }
 }
 
 // Get all custom tones (excluding presets by default)
-export async function getAllCustomTones(includePresets: boolean = false) {
+export async function getAllCustomTones(includePresets: boolean = false): Promise<CustomTone[]> {
   try {
     await ensureCustomTonesTable();
     const result = includePresets
@@ -392,15 +402,15 @@ export async function getAllCustomTones(includePresets: boolean = false) {
           WHERE is_preset = false
           ORDER BY created_at DESC
         `;
-    return Array.isArray(result) ? result : [];
+    return Array.isArray(result) ? (result as CustomTone[]) : [];
   } catch (error) {
-    console.error('Error getting all custom tones:', error);
+    logger.error('Error getting all custom tones:', error);
     return [];
   }
 }
 
 // Get industry presets
-export async function getIndustryPresets(industry?: string) {
+export async function getIndustryPresets(industry?: string): Promise<CustomTone[]> {
   try {
     await ensureCustomTonesTable();
     const result = industry
@@ -434,9 +444,9 @@ export async function getIndustryPresets(industry?: string) {
           WHERE is_preset = true
           ORDER BY industry, name
         `;
-    return Array.isArray(result) ? result : [];
+    return Array.isArray(result) ? (result as CustomTone[]) : [];
   } catch (error) {
-    console.error('Error getting industry presets:', error);
+    logger.error('Error getting industry presets:', error);
     return [];
   }
 }
@@ -449,9 +459,9 @@ export async function updateCustomTone(
     descriptionEnglish?: string;
     descriptionKurdish?: string;
     industry?: string;
-    toneMix?: { tone: string; percentage: number }[];
+    toneMix?: ToneMix[];
   }
-) {
+): Promise<CustomTone | null> {
   try {
     await ensureCustomTonesTable();
     
@@ -461,14 +471,12 @@ export async function updateCustomTone(
       return null;
     }
 
-    // Type assertion since getCustomTone returns properly typed data
-    const currentTone = current as any;
     const updatedData = {
-      name: data.name !== undefined ? data.name : currentTone.name,
-      descriptionEnglish: data.descriptionEnglish !== undefined ? data.descriptionEnglish : currentTone.descriptionEnglish,
-      descriptionKurdish: data.descriptionKurdish !== undefined ? data.descriptionKurdish : currentTone.descriptionKurdish,
-      industry: data.industry !== undefined ? data.industry : currentTone.industry,
-      toneMix: data.toneMix !== undefined ? data.toneMix : currentTone.toneMix,
+      name: data.name !== undefined ? data.name : current.name,
+      descriptionEnglish: data.descriptionEnglish !== undefined ? data.descriptionEnglish : current.descriptionEnglish,
+      descriptionKurdish: data.descriptionKurdish !== undefined ? data.descriptionKurdish : current.descriptionKurdish,
+      industry: data.industry !== undefined ? data.industry : current.industry,
+      toneMix: data.toneMix !== undefined ? data.toneMix : current.toneMix,
     };
 
     const result = await sql`
@@ -493,15 +501,15 @@ export async function updateCustomTone(
         updated_at as "updatedAt"
     `;
     
-    return Array.isArray(result) && result.length > 0 ? result[0] : null;
+    return Array.isArray(result) && result.length > 0 ? (result[0] as CustomTone) : null;
   } catch (error) {
-    console.error('Error updating custom tone:', error);
+    logger.error('Error updating custom tone:', error);
     throw error;
   }
 }
 
 // Delete a custom tone
-export async function deleteCustomTone(id: number) {
+export async function deleteCustomTone(id: number): Promise<boolean> {
   try {
     await ensureCustomTonesTable();
     await sql`
@@ -617,7 +625,7 @@ export async function seedIndustryPresets() {
       }
     }
   } catch (error) {
-    console.error('Error seeding industry presets:', error);
+    logger.error('Error seeding industry presets:', error);
   }
 }
 

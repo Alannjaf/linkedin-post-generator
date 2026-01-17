@@ -173,3 +173,126 @@ export interface GeneratedCarousel {
   };
 }
 
+// Database row types
+export interface TrendingPostsCacheRow {
+  id: number;
+  search_query: string;
+  posts_data: TrendingPost[] | string; // Can be JSONB string or parsed array
+  engagement_summary?: {
+    totalPosts: number;
+    avgLikes: number;
+    avgComments: number;
+    avgShares: number;
+    avgTotalEngagement: number;
+    totalHashtags: Record<string, number>;
+    postTypeDistribution: Record<string, number>;
+  } | null;
+  cached_at: string;
+  expires_at: string;
+}
+
+export interface SavedPostRow {
+  id: number;
+  post_id: string;
+  post_data: TrendingPost;
+  saved_at: string;
+  notes?: string | null;
+}
+
+export interface CustomToneRow {
+  id: number;
+  name: string;
+  description_english: string;
+  description_kurdish: string;
+  industry?: string | null;
+  is_preset: boolean;
+  tone_mix?: ToneMix[] | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DraftRow {
+  id: string;
+  title: string;
+  content: string;
+  language: Language;
+  tone: Tone;
+  length: PostLength;
+  hashtags: string[];
+  generated_image?: string | null;
+  image_prompt?: string | null;
+  edited_image_prompt?: string | null;
+  original_context?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// LinkedIn API response types for parsing
+export interface LinkedInAPIPostItem {
+  item?: {
+    searchFeedUpdate?: {
+      update?: {
+        commentary?: {
+          text?: {
+            text?: string;
+          };
+        };
+        socialDetail?: {
+          totalSocialActivityCounts?: {
+            numLikes?: number;
+            numComments?: number;
+            numShares?: number;
+            reactionTypeCounts?: Array<{
+              reactionType?: string;
+              count?: number;
+            }>;
+          };
+        };
+        actor?: {
+          name?: {
+            text?: string;
+          };
+          navigationContext?: {
+            actionTarget?: string;
+          };
+          supplementaryActorInfo?: {
+            text?: string;
+          };
+          description?: {
+            text?: string;
+          };
+          subDescription?: {
+            text?: string;
+          };
+        };
+        socialContent?: {
+          shareUrl?: string;
+        };
+        backendUrn?: string;
+        shareUrn?: string;
+        content?: {
+          pollComponent?: unknown;
+          linkedInVideoComponent?: unknown;
+          imageComponent?: unknown;
+        };
+      };
+      socialContent?: {
+        shareUrl?: string;
+      };
+    };
+  };
+}
+
+export interface LinkedInAPIResponse {
+  data?: {
+    elements?: Array<{
+      items?: LinkedInAPIPostItem[];
+    }>;
+    paging?: {
+      total?: number;
+    };
+  };
+  success?: boolean;
+  message?: string;
+}
+

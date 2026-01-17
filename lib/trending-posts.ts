@@ -1,4 +1,4 @@
-import { TrendingPost, TrendingPostsSearchParams } from '@/types';
+import { TrendingPost, TrendingPostsSearchParams, LinkedInAPIResponse, LinkedInAPIPostItem, TrendingPostsCacheRow } from '@/types';
 import { getCachedTrendingPosts, saveTrendingPostsCache, ensureTrendingPostsCacheTable } from './db';
 
 // Extract hashtags from post content
@@ -9,15 +9,16 @@ function extractHashtags(text: string): string[] {
 }
 
 // Determine post type from LinkedIn API response
-function getPostType(item: any): 'text' | 'poll' | 'video' | 'image' {
-  if (item.content?.pollComponent) return 'poll';
-  if (item.content?.linkedInVideoComponent) return 'video';
-  if (item.content?.imageComponent) return 'image';
+type UpdateType = NonNullable<NonNullable<NonNullable<NonNullable<LinkedInAPIPostItem['item']>['searchFeedUpdate']>['update']>>;
+function getPostType(update: UpdateType | undefined): 'text' | 'poll' | 'video' | 'image' {
+  if (update?.content?.pollComponent) return 'poll';
+  if (update?.content?.linkedInVideoComponent) return 'video';
+  if (update?.content?.imageComponent) return 'image';
   return 'text';
 }
 
 // Parse LinkedIn API response into TrendingPost format
-export function parseLinkedInPostResponse(data: any): TrendingPost[] {
+export function parseLinkedInPostResponse(data: LinkedInAPIResponse): TrendingPost[] {
   if (!data?.data?.elements || !Array.isArray(data.data.elements)) {
     return [];
   }
@@ -56,7 +57,7 @@ export function parseLinkedInPostResponse(data: any): TrendingPost[] {
       const reactionTypeCounts = activityCounts.reactionTypeCounts || [];
       
       const totalReactions = reactionTypeCounts.reduce(
-        (sum: number, r: any) => sum + (r.count || 0),
+        (sum: number, r) => sum + (r.count || 0),
         0
       );
 
@@ -98,7 +99,7 @@ export function parseLinkedInPostResponse(data: any): TrendingPost[] {
           comments: activityCounts.numComments || 0,
           shares: activityCounts.numShares || 0,
           totalReactions,
-          reactionBreakdown: reactionTypeCounts.map((r: any) => ({
+          reactionBreakdown: reactionTypeCounts.map((r) => ({
             type: r.reactionType || 'UNKNOWN',
             count: r.count || 0,
           })),
@@ -174,18 +175,34 @@ export async function searchTrendingPosts(
 
   // Check cache first
   const cached = await getCachedTrendingPosts(cacheKey);
-  if (cached && 'posts_data' in cached) {
-    const postsData = (cached as any).posts_data as TrendingPost[];
-    const filteredPosts = minEngagement > 0
-      ? postsData.filter(p => p.engagement.totalReactions >= minEngagement)
-      : postsData;
+  if (cached) {
+    // Handle both JSONB string and already parsed object
+    let postsData: TrendingPost[];
+    const postsDataValue = cached.posts_data;
+    if (typeof postsDataValue === 'string') {
+      try {
+        postsData = JSON.parse(postsDataValue);
+      } catch (e) {
+        postsData = [];
+      }
+    } else if (Array.isArray(postsDataValue)) {
+      postsData = postsDataValue;
+    } else {
+      postsData = [];
+    }
 
-    return {
-      posts: filteredPosts,
-      totalResults: Array.isArray(postsData) ? postsData.length : 0,
-      cached: true,
-      cacheExpiresAt: (cached as any).expires_at,
-    };
+    if (postsData.length > 0) {
+      const filteredPosts = minEngagement > 0
+        ? postsData.filter(p => p.engagement.totalReactions >= minEngagement)
+        : postsData;
+
+      return {
+        posts: filteredPosts,
+        totalResults: postsData.length,
+        cached: true,
+        cacheExpiresAt: cached.expires_at,
+      };
+    }
   }
 
   // Cache miss - would need to call API here

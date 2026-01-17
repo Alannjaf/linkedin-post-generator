@@ -12,6 +12,7 @@ import {
   ensureTrendingPostsCacheTable,
   deleteCachedTrendingPosts
 } from '@/lib/db';
+import { logger } from '@/lib/utils/logger';
 
 const RAPIDAPI_HOST = 'linkedin-api-data.p.rapidapi.com';
 
@@ -50,7 +51,7 @@ export async function POST(request: NextRequest) {
         try {
           postsData = JSON.parse(postsDataValue);
         } catch (e) {
-          console.error('[Trending Posts API] Error parsing cached posts_data:', e);
+          logger.error('[Trending Posts API] Error parsing cached posts_data:', e);
           postsData = [];
         }
       } else if (Array.isArray(postsDataValue)) {
@@ -145,15 +146,15 @@ export async function POST(request: NextRequest) {
             
             resolve(data);
           } catch (error) {
-            console.error('[Trending Posts API] Parse error:', error);
-            console.error('[Trending Posts API] Failed to parse body:', bodyString.substring(0, 200));
+            logger.error('[Trending Posts API] Parse error:', error);
+            logger.error('[Trending Posts API] Failed to parse body:', bodyString.substring(0, 200));
             reject(new Error('Failed to parse API response'));
           }
         });
       });
 
       req.on('error', function (error) {
-        console.error('[Trending Posts API] Request error:', error);
+        logger.error('[Trending Posts API] Request error:', error);
         reject(error);
       });
 
@@ -227,8 +228,8 @@ export async function POST(request: NextRequest) {
       engagementSummary,
     });
   } catch (error) {
-    console.error('[Trending Posts API] Error searching trending posts:', error);
-    console.error('[Trending Posts API] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+    logger.error('[Trending Posts API] Error searching trending posts:', error);
+    logger.error('[Trending Posts API] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
     const errorMessage = error instanceof Error 
       ? error.message 
       : 'Failed to search trending posts';
@@ -268,7 +269,7 @@ export async function GET(request: NextRequest) {
       message: cached ? 'Results are cached' : 'No cached results found',
     });
   } catch (error) {
-    console.error('Error checking cache:', error);
+    logger.error('Error checking cache:', error);
     return NextResponse.json(
       { error: 'Failed to check cache' },
       { status: 500 }
