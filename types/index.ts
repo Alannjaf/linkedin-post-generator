@@ -149,3 +149,27 @@ export interface AdaptedContent {
   };
 }
 
+export interface CarouselSlide {
+  slideNumber: number;
+  title: string;
+  content: string;
+  imageSuggestion?: string;
+  characterCount: number;
+  keyPoints?: string[];
+}
+
+export interface GeneratedCarousel {
+  slides: CarouselSlide[];
+  totalSlides: number;
+  introduction?: string;
+  conclusion?: string;
+  hashtags: string[];
+  imageTheme?: string;
+  brandingGuidelines?: string;
+  metadata: {
+    originalLength: number;
+    carouselLength: number;
+    averageSlideLength: number;
+  };
+}
+

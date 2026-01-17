@@ -10,6 +10,7 @@ import SavedPostsPanel from '@/components/SavedPostsPanel';
 import HookGenerator from '@/components/HookGenerator';
 import CTAOptimizer from '@/components/CTAOptimizer';
 import CrossPlatformAdapter from '@/components/CrossPlatformAdapter';
+import CarouselGenerator from '@/components/CarouselGenerator';
 import { saveDraft } from '@/lib/storage';
 import { savePost, getAllSavedPosts, deleteSavedPost } from '@/lib/saved-posts';
 import { convertHtmlToLinkedInFormat, htmlToPlainText, plainTextToHtml } from '@/lib/linkedin-formatter';
@@ -797,6 +798,19 @@ export default function Home() {
                   <CrossPlatformAdapter
                     postContent={postContent}
                     language={currentLanguage}
+                  />
+                </div>
+
+                {/* Carousel Generator Section */}
+                <div className="col-span-1">
+                  <CarouselGenerator
+                    postContent={postContent}
+                    language={currentLanguage}
+                    tone={currentTone}
+                    onCarouselSelected={(newContent) => {
+                      setPostContent(newContent);
+                      setSuccess('Carousel applied to post!');
+                    }}
                   />
                 </div>
               </div>

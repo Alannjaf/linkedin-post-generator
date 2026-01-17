@@ -279,3 +279,79 @@ Requirements:
 Write a complete ${platformName} post that fits within the limits.`;
   }
 }
+
+export async function buildCarouselPrompt(params: {
+  postContent: string;
+  language: Language;
+  tone: Tone;
+  targetSlideCount?: number;
+}): Promise<string> {
+  const { postContent, language, tone, targetSlideCount } = params;
+  const toneDesc = await getToneDescription(tone, language);
+
+  const slideCountInstruction = targetSlideCount
+    ? (language === 'kurdish'
+        ? `- ژمارەی سلاید: ${targetSlideCount} سلاید`
+        : `- Number of slides: ${targetSlideCount} slides`)
+    : (language === 'kurdish'
+        ? `- ژمارەی سلاید: بەپێی درێژی ناوەڕۆک (3-10 سلاید)`
+        : `- Number of slides: Based on content length (3-10 slides)`);
+
+  if (language === "kurdish") {
+    return `بەپێی پۆستی LinkedIn خوارەوە، پۆستەکە بگۆڕە بۆ فۆرماتی carousel (سلایدی هەمەجۆر). 
+
+پۆستی سەرەکی:
+${postContent}
+
+تێبینیەکان:
+- شێواز: ${toneDesc}
+- ${slideCountInstruction}
+- درێژی هەر سلایدێک: نزیکەی 125 پیت (ناوەڕۆک + سەردێڕ)
+- سەردێڕی سلاید: 30-50 پیت
+- ناوەڕۆکی سلاید: 80-120 پیت
+
+پێویستیەکی زۆر گرنگ بۆ وێنەکان:
+- هەموو وێنەکان دەبێت هەمان تێم و براندینگ هەبێت
+- هەمان شێوازی بینراو (وەک minimalist, corporate, modern)
+- هەمان پاڵێتی ڕەنگ (ڕەنگەکان دیاری بکە)
+- هەمان زمانێکی دیزاین (شێوازی وێنەکێشان، فۆتۆگرافی)
+- تێمی سەرەکی دروست بکە کە بۆ هەموو سلایدەکان بەکاربهێنرێت
+
+فۆرمات:
+بۆ هەر سلاید، بنووسە:
+SLIDE [number]:
+TITLE: [سەردێڕ]
+CONTENT: [ناوەڕۆک]
+IMAGE: [پێشنیاری وێنە - دڵنیابە کە لەگەڵ تێمی سەرەکی بگونجێت]
+
+لە کۆتاییدا، تێمی سەرەکی وێنەکان بنووسە کە بۆ هەموو سلایدەکان بەکاربهێنرێت.`;
+  } else {
+    return `Based on the following LinkedIn post, convert it into a carousel format (multi-slide document).
+
+Original Post:
+${postContent}
+
+Requirements:
+- Tone: ${toneDesc}
+- ${slideCountInstruction}
+- Each slide length: Approximately 125 characters (content + title)
+- Slide title: 30-50 characters
+- Slide content: 80-120 characters
+
+CRITICAL REQUIREMENT FOR IMAGES:
+- ALL images must share the SAME theme and branding
+- Same visual style (e.g., minimalist, corporate, modern)
+- Same color palette (specify consistent colors)
+- Same design language (illustration style, photography style)
+- Generate a master theme that applies to ALL slides
+
+Format:
+For each slide, write:
+SLIDE [number]:
+TITLE: [title]
+CONTENT: [content]
+IMAGE: [image suggestion - ensure it matches the master theme]
+
+At the end, write the master image theme that applies to all slides.`;
+  }
+}
