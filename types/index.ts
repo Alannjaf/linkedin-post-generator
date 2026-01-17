@@ -107,3 +107,45 @@ export interface UpdateCustomToneRequest {
   toneMix?: ToneMix[];
 }
 
+export type HookStyle = 'question' | 'statement' | 'story' | 'statistic' | 'any';
+
+export interface GeneratedHook {
+  text: string;
+  style: HookStyle;
+  reasoning?: string;
+}
+
+export interface CTAPlacement {
+  position: 'start' | 'middle' | 'end' | 'embedded';
+  suggestion: string;
+}
+
+export interface GeneratedCTA {
+  text: string;
+  placement: CTAPlacement;
+  effectivenessScore?: number;
+  reasoning?: string;
+}
+
+export type Platform = 'twitter' | 'facebook' | 'medium' | 'instagram';
+
+export interface PlatformLimits {
+  maxCharacters: number;
+  maxHashtags?: number;
+  supportsThreads?: boolean;
+  supportsFormatting?: boolean;
+}
+
+export interface AdaptedContent {
+  content: string;
+  platform: Platform;
+  characterCount: number;
+  hashtags: string[];
+  changes: string[];
+  metadata: {
+    originalLength: number;
+    adaptedLength: number;
+    truncationApplied: boolean;
+  };
+}
+

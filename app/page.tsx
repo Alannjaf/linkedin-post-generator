@@ -7,6 +7,9 @@ import HashtagSuggestions from '@/components/HashtagSuggestions';
 import DraftManager from '@/components/DraftManager';
 import TrendingPostsPanel from '@/components/TrendingPostsPanel';
 import SavedPostsPanel from '@/components/SavedPostsPanel';
+import HookGenerator from '@/components/HookGenerator';
+import CTAOptimizer from '@/components/CTAOptimizer';
+import CrossPlatformAdapter from '@/components/CrossPlatformAdapter';
 import { saveDraft } from '@/lib/storage';
 import { savePost, getAllSavedPosts, deleteSavedPost } from '@/lib/saved-posts';
 import { convertHtmlToLinkedInFormat, htmlToPlainText, plainTextToHtml } from '@/lib/linkedin-formatter';
@@ -762,6 +765,40 @@ export default function Home() {
                     </div>
                   </div>
                 )}
+
+                {/* Hook Generator Section */}
+                <div className="col-span-1">
+                  <HookGenerator
+                    postContent={postContent}
+                    language={currentLanguage}
+                    tone={currentTone}
+                    onHookSelected={(newContent) => {
+                      setPostContent(newContent);
+                      setSuccess('Hook applied to post!');
+                    }}
+                  />
+                </div>
+
+                {/* CTA Optimizer Section */}
+                <div className="col-span-1">
+                  <CTAOptimizer
+                    postContent={postContent}
+                    language={currentLanguage}
+                    tone={currentTone}
+                    onCTASelected={(newContent) => {
+                      setPostContent(newContent);
+                      setSuccess('CTA inserted into post!');
+                    }}
+                  />
+                </div>
+
+                {/* Cross-Platform Adapter Section */}
+                <div className="col-span-1 md:col-span-2 xl:col-span-1">
+                  <CrossPlatformAdapter
+                    postContent={postContent}
+                    language={currentLanguage}
+                  />
+                </div>
               </div>
             )}
 
