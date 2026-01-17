@@ -172,7 +172,7 @@ Answer with just the single word that best matches.`;
 - Use appropriate professional styling for LinkedIn
 - Match the tone and intent of the content`;
 
-    // STEP 3: Create comprehensive prompt with examples
+    // STEP 3: Create comprehensive prompt - consolidated to remove duplicates
     
     // For Kurdish posts with extracted text, create a mandatory template
     const kurdishTextRequirement = isKurdishPost && kurdishTextToInclude ? `
@@ -192,10 +192,23 @@ This is NOT optional. This is NOT negotiable. Even if you think text overlays
 aren't good for LinkedIn, KURDISH ENGAGEMENT POSTS REQUIRE THE QUESTION TO BE VISIBLE.
 
 The text must be:
-✓ In the exact Arabic script shown above (no Latin alphabet)
+✓ In the exact Arabic script shown above (no Latin alphabet, no translation)
 ✓ Prominent and readable (large size, clear placement)
 ✓ The focal point that invites comments
 ✓ Integrated into the scene (on whiteboard, banner, screen, sign, etc.)
+✓ Character-for-character exact match (preserve Sorani/Kurmanji dialect exactly)
+
+Kurdish Text Placement:
+- For questions: Large, prominent banner, whiteboard, or speech bubble
+- Make it the FOCAL POINT that invites engagement
+- Use clear, readable Kurdish font
+- Ensure text is large enough to be the main call-to-action
+
+Kurdish Cultural Elements (optional):
+- Consider subtle use of Kurdish flag colors (red, white, green) in design accents
+- Include authentic cultural visual elements when appropriate
+- Make it feel genuine to Kurdish digital culture
+- Avoid stereotypes - focus on modern, professional Kurdish context
 
 IF YOUR PROMPT DOES NOT INCLUDE THIS EXACT KURDISH TEXT, IT IS WRONG.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -240,49 +253,10 @@ ${isKurdishPost && kurdishTextToInclude ? `
 ✅ GOOD Example - Showcase Post:
 "Professional product photography showing sleek app interface on iPhone, iPad, and MacBook arranged in modern composition. Polished UI clearly visible on all screens. Subtle gradient background (navy to deep purple). Confident, premium feel. Celebration of finished product. Sharp, high-quality, professional showcase."
 
-${isKurdishPost ? `
-🔴 CRITICAL FOR KURDISH POSTS - EXACT TEXT REQUIREMENT:
-
-${kurdishTextToInclude ? `
-EXACT KURDISH TEXT TO INCLUDE IN THE IMAGE:
-"${kurdishTextToInclude}"
-
-YOU MUST USE THIS EXACT TEXT CHARACTER-FOR-CHARACTER IN ARABIC SCRIPT.
-` : ''}
-
-MANDATORY RULES FOR KURDISH TEXT:
-1. Use the EXACT Arabic script characters as shown above (ئ، ە، ڕ، ێ، ۆ، etc.)
-2. DO NOT translate to Latin/English alphabet (no a, e, i, o, u, k, ch, etc.)
-3. DO NOT simplify, paraphrase, or shorten the text
-4. DO NOT change dialects - preserve Sorani/Kurmanji exactly as written
-5. Copy and paste the Kurdish text EXACTLY - character-for-character match required
-
-When specifying in your prompt, write:
-"Prominent text banner/sign/whiteboard displaying in Kurdish Arabic script: ${kurdishTextToInclude || '[Kurdish text]'}"
-
-Examples of CORRECT vs WRONG:
-❌ WRONG: "Text: Kêşet çi ye?" (Latin script - NEVER do this)
-❌ WRONG: "Text: What's your problem?" (English translation - NEVER do this)
-❌ WRONG: "Kurdish text: چی؟" (Shortened - maintain full question)
-✅ CORRECT: "Text in Kurdish: ${kurdishTextToInclude || 'گەورەترین سەرێشەی ڕۆژانەتان چییە؟'}" (Exact match)
-
-Kurdish Text Placement:
-- For questions: Large, prominent banner, whiteboard, or speech bubble
-- Make it the FOCAL POINT that invites engagement
-- Use clear, readable Kurdish font
-- Ensure text is large enough to be the main call-to-action
-
-Kurdish Cultural Elements:
-- Consider subtle use of Kurdish flag colors (red, white, green) in design accents
-- Include authentic cultural visual elements when appropriate
-- Make it feel genuine to Kurdish digital culture
-- Avoid stereotypes - focus on modern, professional Kurdish context
-` : `
 For English posts:
 - Generally avoid text overlays unless essential to the message
 - If including text (quotes, statistics, key phrases), integrate naturally
 - Keep text minimal and purposeful
-`}
 
 STYLE VARIETY REQUIREMENTS:
 - NEVER default to "3D isometric" or other overused styles
@@ -301,11 +275,8 @@ CRITICAL REQUIREMENTS:
 4. Focus on what the author is DOING/ASKING, not just the topic
 5. Create professional LinkedIn-appropriate imagery
 6. Be detailed enough for an AI image generator to create accurately
-${isKurdishPost && kurdishTextToInclude ? `
-7. 🚨 MUST INCLUDE THE KURDISH TEXT: ${kurdishTextToInclude} - THIS IS MANDATORY
-` : ''}
 
-Now create a detailed image generation prompt for the post above. ${isKurdishPost && kurdishTextToInclude ? `REMEMBER: You MUST include the Kurdish text "${kurdishTextToInclude}" prominently in your image prompt description.` : ''} Write ONLY the image prompt in English (with exact Kurdish text specified when needed), nothing else. Make it specific, purposeful, and aligned with the ${postType} post type.`;
+Now create a detailed image generation prompt for the post above. Write ONLY the image prompt in English (with exact Kurdish text specified when needed), nothing else. Make it specific, purposeful, and aligned with the ${postType} post type.`;
 
     // STEP 4: Generate the actual image prompt
     const response = await fetch(OPENROUTER_API_URL, {
@@ -354,19 +325,16 @@ Now create a detailed image generation prompt for the post above. ${isKurdishPos
                             generatedPrompt.includes('Kurdish:');
       
       if (!hasKurdishText) {
-        logger.warn('Generated prompt missing Kurdish text, regenerating with stricter instructions...');
+        logger.warn('Generated prompt missing Kurdish text, regenerating with minimal correction...');
         
-        // Retry with even more forceful prompt
-        const retryPrompt = `CRITICAL ERROR: Your previous response was missing required Kurdish text.
+        // Optimized retry: Only send minimal correction prompt instead of full conversation history
+        const retryPrompt = `Your previous response was missing the required Kurdish text. 
 
-This is a Kurdish engagement post asking: "${kurdishTextToInclude}"
+Create an image prompt that includes this exact Kurdish text prominently displayed: "${kurdishTextToInclude}"
 
-You MUST create an image prompt that includes this exact text prominently displayed in the image.
+Your prompt must contain a phrase like: "[whiteboard/banner/sign] displaying the Kurdish text: ${kurdishTextToInclude}"
 
-REQUIRED: Your response must contain a phrase like:
-"[whiteboard/banner/sign] displaying the Kurdish text: ${kurdishTextToInclude}"
-
-Create the image prompt now, ensuring the Kurdish question is prominently featured:`;
+Generate the complete image prompt now:`;
 
         const retryResponse = await fetch(OPENROUTER_API_URL, {
           method: "POST",
@@ -379,9 +347,10 @@ Create the image prompt now, ensuring the Kurdish question is prominently featur
           body: JSON.stringify({
             model: DEFAULT_MODEL,
             messages: [
-              { role: "user", content: analysisPrompt },
-              { role: "assistant", content: generatedPrompt },
-              { role: "user", content: retryPrompt }
+              {
+                role: "user",
+                content: `${analysisPrompt}\n\nYour previous attempt missed the Kurdish text requirement. ${retryPrompt}`,
+              },
             ],
             temperature: 0.6,
           }),

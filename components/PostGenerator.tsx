@@ -278,24 +278,18 @@ export default function PostGenerator({ onPostGenerated, onError, initialContext
             Tone
           </label>
           <div className="space-y-3">
-            {/* Built-in Tones - Inline Pills */}
-            <div className="flex flex-wrap gap-2">
+            <select
+              id="tone"
+              value={tone}
+              onChange={(e) => setTone(e.target.value as Tone)}
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white input-focus transition-all duration-200 font-medium"
+            >
               {BUILT_IN_TONES.map((toneOption) => (
-                <button
-                  key={toneOption.value}
-                  type="button"
-                  onClick={() => setTone(toneOption.value)}
-                  className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
-                    tone === toneOption.value
-                      ? 'bg-blue-600 text-white shadow-md scale-105'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                  title={`Use ${toneOption.label.toLowerCase()} tone`}
-                >
+                <option key={toneOption.value} value={toneOption.value}>
                   {toneOption.label}
-                </button>
+                </option>
               ))}
-            </div>
+            </select>
 
             {/* Advanced Options */}
             <div>
