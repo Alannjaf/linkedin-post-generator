@@ -11,7 +11,11 @@ import HookGenerator from '@/components/HookGenerator';
 import CTAOptimizer from '@/components/CTAOptimizer';
 import CrossPlatformAdapter from '@/components/CrossPlatformAdapter';
 import CarouselGenerator from '@/components/CarouselGenerator';
-import { saveDraft } from '@/lib/storage';
+import WorkflowStepper from '@/components/WorkflowStepper';
+import FloatingActionMenu from '@/components/FloatingActionMenu';
+import Toast from '@/components/Toast';
+import LinkedInPreview from '@/components/LinkedInPreview';
+import { saveDraft, getAllDrafts } from '@/lib/storage';
 import { savePost, getAllSavedPosts, deleteSavedPost } from '@/lib/saved-posts';
 import { convertHtmlToLinkedInFormat, htmlToPlainText, plainTextToHtml } from '@/lib/linkedin-formatter';
 import { Language, Tone, PostLength, Draft, TrendingPost } from '@/types';
@@ -36,14 +40,21 @@ export default function Home() {
   const [inspirationContext, setInspirationContext] = useState<string>('');
   const [savedPostIds, setSavedPostIds] = useState<Set<string>>(new Set());
   const [useUnicodeFormatting, setUseUnicodeFormatting] = useState<boolean>(true);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [draftsCount, setDraftsCount] = useState(0);
+  const [savedPostsCount, setSavedPostsCount] = useState(0);
+  const [isDraftManagerOpen, setIsDraftManagerOpen] = useState(false);
+  const [isSavedPostsOpen, setIsSavedPostsOpen] = useState(false);
+  const [enhancementTab, setEnhancementTab] = useState<'content' | 'formatting' | 'media'>('content');
 
-  // Load saved post IDs on mount
+  // Load saved post IDs and counts on mount
   useEffect(() => {
     const loadSavedPostIds = async () => {
       try {
         const savedPosts = await getAllSavedPosts();
         const ids = new Set(savedPosts.map(sp => sp.postId));
         setSavedPostIds(ids);
+        setSavedPostsCount(savedPosts.length);
       } catch (error) {
         console.error('Failed to load saved post IDs:', error);
       }
@@ -51,16 +62,33 @@ export default function Home() {
     loadSavedPostIds();
   }, []);
 
-  // Clear messages after 5 seconds
+  // Load drafts count
   useEffect(() => {
-    if (error || success) {
-      const timer = setTimeout(() => {
-        setError(null);
-        setSuccess(null);
-      }, 5000);
-      return () => clearTimeout(timer);
+    const loadDraftsCount = async () => {
+      try {
+        const result = await getAllDrafts(1, 1);
+        setDraftsCount(result.pagination.total);
+      } catch (error) {
+        console.error('Failed to load drafts count:', error);
+      }
+    };
+    loadDraftsCount();
+  }, []);
+
+  // Show toast for success messages
+  useEffect(() => {
+    if (success) {
+      setToast({ message: success, type: 'success' });
+      setSuccess(null);
     }
-  }, [error, success]);
+  }, [success]);
+
+  // Show toast for non-critical errors
+  useEffect(() => {
+    if (error && !error.includes('Failed to generate') && !error.includes('API error')) {
+      setToast({ message: error, type: 'error' });
+    }
+  }, [error]);
 
   const handlePostGenerated = (content: string, generatedHashtags: string[], language: Language, tone: Tone, length: PostLength, context: string) => {
     // Convert plain text to HTML if it's not already HTML
@@ -105,10 +133,10 @@ export default function Home() {
     const finalPost = getFinalPost();
     try {
       await navigator.clipboard.writeText(finalPost);
-      setSuccess('Copied to clipboard! Paste into LinkedIn to see formatting.');
+      setToast({ message: 'Copied to clipboard! Paste into LinkedIn to see formatting.', type: 'success' });
       setError(null);
     } catch (err) {
-      setError('Failed to copy to clipboard');
+      setToast({ message: 'Failed to copy to clipboard', type: 'error' });
     }
   };
 
@@ -123,21 +151,15 @@ export default function Home() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    setSuccess('Post exported!');
+    setToast({ message: 'Post exported!', type: 'success' });
     setError(null);
   };
 
   const handleSaveDraft = async () => {
     if (!postContent.trim()) {
-      setError('No content to save');
+      setToast({ message: 'No content to save', type: 'error' });
       return;
     }
-
-    // Optimistic update: show success immediately
-    const originalSuccess = success;
-    const originalError = error;
-    setSuccess('Draft saved!');
-    setError(null);
 
     try {
       // Get plain text title from HTML content
@@ -155,11 +177,12 @@ export default function Home() {
         editedImagePrompt: editedImagePrompt || undefined,
         originalContext: originalContext || undefined,
       });
-      // Success message already shown optimistically
+      setToast({ message: 'Draft saved!', type: 'success' });
+      // Update drafts count
+      const result = await getAllDrafts(1, 1);
+      setDraftsCount(result.pagination.total);
     } catch (err) {
-      // Rollback on failure
-      setSuccess(originalSuccess);
-      setError('Failed to save draft. Please try again.');
+      setToast({ message: 'Failed to save draft. Please try again.', type: 'error' });
     }
   };
 
@@ -184,7 +207,7 @@ export default function Home() {
     setImagePrompt(draft.imagePrompt || '');
     setEditedImagePrompt(draft.editedImagePrompt || draft.imagePrompt || '');
     setError(null);
-    setSuccess('Draft loaded!');
+    setToast({ message: 'Draft loaded!', type: 'success' });
   };
 
   const handleClear = () => {
@@ -221,18 +244,18 @@ export default function Home() {
   const handleSavePost = async (post: TrendingPost) => {
     // Optimistic update: add to saved posts immediately
     const wasAlreadySaved = savedPostIds.has(post.id);
-    const originalSuccess = success;
-    const originalError = error;
     
     if (!wasAlreadySaved) {
       setSavedPostIds(prev => new Set([...prev, post.id]));
-      setSuccess('Post saved! You can find it in Saved Posts.');
-      setError(null);
     }
 
     try {
       await savePost(post);
-      // Success already shown optimistically
+      if (!wasAlreadySaved) {
+        setToast({ message: 'Post saved! You can find it in Saved Posts.', type: 'success' });
+        const savedPosts = await getAllSavedPosts();
+        setSavedPostsCount(savedPosts.length);
+      }
     } catch (err) {
       // Rollback on failure
       if (!wasAlreadySaved) {
@@ -242,8 +265,7 @@ export default function Home() {
           return newSet;
         });
       }
-      setSuccess(originalSuccess);
-      setError('Failed to save post. Please try again.');
+      setToast({ message: 'Failed to save post. Please try again.', type: 'error' });
     }
   };
 
@@ -398,19 +420,40 @@ export default function Home() {
     return final;
   };
 
+  const getCurrentStep = (): 'generate' | 'edit' | 'enhance' | 'export' => {
+    if (!postContent) return 'generate';
+    if (postContent && !hashtags.length) return 'edit';
+    if (postContent && hashtags.length && selectedHashtags.length === 0) return 'enhance';
+    return 'export';
+  };
+
+  const handleStepClick = (step: 'generate' | 'edit' | 'enhance' | 'export') => {
+    const elementId = step === 'generate' ? 'generate-section' : 
+                     step === 'edit' ? 'edit-section' :
+                     step === 'enhance' ? 'enhance-section' : 'export-section';
+    const element = document.getElementById(elementId);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
   return (
     <main className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
-        <header className="mb-10 sm:mb-12">
+        <header className="mb-8 sm:mb-10">
           <h1 className="text-4xl sm:text-5xl font-bold text-gray-900 mb-3 tracking-tight">
             LinkedIn Post Generator
           </h1>
-          <p className="text-lg text-gray-600 max-w-2xl">
+          <p className="text-lg text-gray-600 max-w-2xl mb-6">
             Generate professional LinkedIn posts from your draft ideas using AI
           </p>
+          
+          {/* Workflow Stepper */}
+          <WorkflowStepper currentStep={getCurrentStep()} onStepClick={handleStepClick} />
         </header>
 
-        {error && (
+        {/* Critical Error Messages (stay at top) */}
+        {error && (error.includes('Failed to generate') || error.includes('API error')) && (
           <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded-lg text-red-800 shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
             <div className="flex items-center gap-2">
               <svg className="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
@@ -421,19 +464,17 @@ export default function Home() {
           </div>
         )}
 
-        {success && (
-          <div className="mb-6 p-4 bg-green-50 border-l-4 border-green-500 rounded-lg text-green-800 shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
-            <div className="flex items-center gap-2">
-              <svg className="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-              </svg>
-              <span className="font-medium">{success}</span>
-            </div>
-          </div>
+        {/* Toast Notifications */}
+        {toast && (
+          <Toast
+            message={toast.message}
+            type={toast.type}
+            onDismiss={() => setToast(null)}
+          />
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
-          <div className="space-y-6">
+          <div className="space-y-6" id="generate-section">
             <div className="bg-white p-6 sm:p-8 rounded-xl shadow-md border border-gray-200/50 card-hover">
               <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
                 <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -460,7 +501,7 @@ export default function Home() {
             )}
           </div>
 
-          <div className="space-y-6">
+          <div className="space-y-6" id="edit-section">
             <div className="bg-white p-6 sm:p-8 rounded-xl shadow-md border border-gray-200/50 card-hover">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
@@ -497,123 +538,125 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Full Width Sections - Actions, Image Prompt, Generated Image */}
+        {/* Enhance & Export Sections */}
         {postContent && (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-6 auto-rows-fr mt-6 lg:mt-8">
-                {/* Actions Section - Always Visible */}
-                <div className="bg-white p-6 sm:p-8 rounded-xl shadow-md border border-gray-200/50 card-hover h-fit">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                    <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
-                    Actions
-                  </h3>
-                  
-                  {/* Unicode Formatting Toggle */}
-                  <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={useUnicodeFormatting}
-                        onChange={(e) => setUseUnicodeFormatting(e.target.checked)}
-                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                      />
-                      <div className="flex-1">
-                        <span className="text-sm font-medium text-gray-900">Use Unicode Formatting</span>
-                        <p className="text-xs text-gray-600 mt-0.5">
-                          {useUnicodeFormatting 
-                            ? 'Bold/italic will use Unicode characters. Note: Arabic/Kurdish bold may not render correctly in LinkedIn.'
-                            : 'Plain text only (better for accessibility and search)'}
-                        </p>
-                      </div>
-                    </label>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <button
-                      type="button"
-                      onClick={handleCopyToClipboard}
-                      className="btn-primary bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200/50"
-                    >
-                      <span className="flex items-center justify-center gap-2">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <>
+            {/* Actions & Export Section */}
+            <div id="export-section" className="mt-8 lg:mt-10">
+              <div className="bg-white p-6 sm:p-8 rounded-xl shadow-md border border-gray-200/50 card-hover">
+                <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+                  <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  Export & Actions
+                </h3>
+                
+                <div className="space-y-4">
+                  {/* Primary Actions */}
+                  <div>
+                    <h4 className="text-sm font-semibold text-gray-700 mb-3">Primary Actions</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={handleCopyToClipboard}
+                        className="btn-primary bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200/50 flex items-center justify-center gap-2 w-full"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                         </svg>
-                        <span className="hidden sm:inline">Copy to Clipboard</span>
-                        <span className="sm:hidden">Copy</span>
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleExport}
-                      className="btn-primary bg-green-600 text-white hover:bg-green-700 shadow-green-200/50"
-                    >
-                      <span className="flex items-center justify-center gap-2">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <span className="whitespace-nowrap">Copy to Clipboard</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleExport}
+                        className="btn-primary bg-green-600 text-white hover:bg-green-700 shadow-green-200/50 flex items-center justify-center gap-2 w-full"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
-                        <span className="hidden sm:inline">Export as Text</span>
-                        <span className="sm:hidden">Export</span>
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleGenerateImagePrompt}
-                      disabled={!postContent.trim() || isGeneratingImagePrompt}
-                      className="btn-primary bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200/50 disabled:bg-gray-400"
-                    >
-                      <span className="flex items-center justify-center gap-2">
+                        <span className="whitespace-nowrap">Export as Text</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Image Generation */}
+                  <div className="pt-4 border-t border-gray-200">
+                    <h4 className="text-sm font-semibold text-gray-700 mb-3">Image Generation</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={handleGenerateImagePrompt}
+                        disabled={!postContent.trim() || isGeneratingImagePrompt}
+                        className="btn-primary bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200/50 disabled:bg-gray-400 flex items-center justify-center gap-2 w-full"
+                      >
                         {isGeneratingImagePrompt ? (
                           <>
-                            <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                             </svg>
-                            <span className="hidden sm:inline">Generating...</span>
-                            <span className="sm:hidden">...</span>
+                            <span className="whitespace-nowrap">Generating...</span>
                           </>
                         ) : (
                           <>
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h10m-7 4h7" />
                             </svg>
-                            <span className="hidden lg:inline">Generate Image Prompt</span>
-                            <span className="hidden sm:inline lg:hidden">Image Prompt</span>
-                            <span className="sm:hidden">Prompt</span>
+                            <span className="whitespace-nowrap">Generate Image Prompt</span>
                           </>
                         )}
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleGenerateImage}
-                      disabled={isGeneratingImage || isGeneratingImagePrompt || !editedImagePrompt.trim()}
-                      className="btn-primary bg-purple-600 text-white hover:bg-purple-700 shadow-purple-200/50 disabled:bg-gray-400"
-                    >
-                      <span className="flex items-center justify-center gap-2">
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleGenerateImage}
+                        disabled={isGeneratingImage || isGeneratingImagePrompt || !editedImagePrompt.trim()}
+                        className="btn-primary bg-purple-600 text-white hover:bg-purple-700 shadow-purple-200/50 disabled:bg-gray-400 flex items-center justify-center gap-2 w-full"
+                      >
                         {isGeneratingImage ? (
                           <>
-                            <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                             </svg>
-                            <span className="hidden sm:inline">Generating...</span>
-                            <span className="sm:hidden">...</span>
+                            <span className="whitespace-nowrap">Generating...</span>
                           </>
                         ) : (
                           <>
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                             </svg>
-                            <span className="hidden lg:inline">Generate Image</span>
-                            <span className="hidden sm:inline lg:hidden">Image</span>
-                            <span className="sm:hidden">Image</span>
+                            <span className="whitespace-nowrap">Generate Image</span>
                           </>
                         )}
-                      </span>
-                    </button>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Settings */}
+                  <div className="pt-4 border-t border-gray-200">
+                    <h4 className="text-sm font-semibold text-gray-700 mb-3">Settings</h4>
+                    <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={useUnicodeFormatting}
+                          onChange={(e) => setUseUnicodeFormatting(e.target.checked)}
+                          className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                        />
+                        <div className="flex-1">
+                          <span className="text-sm font-medium text-gray-900">Use Unicode Formatting</span>
+                          <p className="text-xs text-gray-600 mt-0.5">
+                            {useUnicodeFormatting 
+                              ? 'Bold/italic will use Unicode characters. Note: Arabic/Kurdish bold may not render correctly in LinkedIn.'
+                              : 'Plain text only (better for accessibility and search)'}
+                          </p>
+                        </div>
+                      </label>
+                    </div>
                   </div>
                 </div>
+              </div>
+            </div>
 
                 {/* Collapsible Image Prompt Section */}
                 {editedImagePrompt && (
@@ -767,54 +810,163 @@ export default function Home() {
                   </div>
                 )}
 
-                {/* Hook Generator Section */}
-                <div className="col-span-1">
-                  <HookGenerator
-                    postContent={postContent}
-                    language={currentLanguage}
-                    tone={currentTone}
-                    onHookSelected={(newContent) => {
-                      setPostContent(newContent);
-                      setSuccess('Hook applied to post!');
-                    }}
-                  />
+            {/* Enhancement Tools Section */}
+            <div id="enhance-section" className="mt-8 lg:mt-10">
+              <div className="bg-white p-6 sm:p-8 rounded-xl shadow-md border border-gray-200/50 card-hover">
+                <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+                  <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  Post Enhancements
+                </h3>
+
+                {/* Tabs */}
+                <div className="flex border-b border-gray-200 mb-6 overflow-x-auto">
+                  <button
+                    type="button"
+                    onClick={() => setEnhancementTab('content')}
+                    className={`px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${
+                      enhancementTab === 'content'
+                        ? 'border-b-2 border-purple-600 text-purple-600'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    Content
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEnhancementTab('formatting')}
+                    className={`px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${
+                      enhancementTab === 'formatting'
+                        ? 'border-b-2 border-purple-600 text-purple-600'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    Formatting
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEnhancementTab('media')}
+                    className={`px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${
+                      enhancementTab === 'media'
+                        ? 'border-b-2 border-purple-600 text-purple-600'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    Media
+                  </button>
                 </div>
 
-                {/* CTA Optimizer Section */}
-                <div className="col-span-1">
-                  <CTAOptimizer
-                    postContent={postContent}
-                    language={currentLanguage}
-                    tone={currentTone}
-                    onCTASelected={(newContent) => {
-                      setPostContent(newContent);
-                      setSuccess('CTA inserted into post!');
-                    }}
-                  />
-                </div>
+                {/* Tab Content */}
+                <div className="space-y-4">
+                  {enhancementTab === 'content' && (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      <HookGenerator
+                        postContent={postContent}
+                        language={currentLanguage}
+                        tone={currentTone}
+                        onHookSelected={(newContent) => {
+                          setPostContent(newContent);
+                          setToast({ message: 'Hook applied to post!', type: 'success' });
+                        }}
+                      />
+                      <CTAOptimizer
+                        postContent={postContent}
+                        language={currentLanguage}
+                        tone={currentTone}
+                        onCTASelected={(newContent, position) => {
+                          setPostContent(newContent);
+                          setToast({ message: 'CTA inserted into post!', type: 'success' });
+                        }}
+                      />
+                    </div>
+                  )}
 
-                {/* Cross-Platform Adapter Section */}
-                <div className="col-span-1 md:col-span-2 xl:col-span-1">
-                  <CrossPlatformAdapter
-                    postContent={postContent}
-                    language={currentLanguage}
-                  />
-                </div>
+                  {enhancementTab === 'formatting' && (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      <CrossPlatformAdapter
+                        postContent={postContent}
+                        language={currentLanguage}
+                      />
+                      <CarouselGenerator
+                        postContent={postContent}
+                        language={currentLanguage}
+                        tone={currentTone}
+                        onCarouselSelected={(newContent) => {
+                          setPostContent(newContent);
+                          setToast({ message: 'Carousel applied to post!', type: 'success' });
+                        }}
+                      />
+                    </div>
+                  )}
 
-                {/* Carousel Generator Section */}
-                <div className="col-span-1">
-                  <CarouselGenerator
-                    postContent={postContent}
-                    language={currentLanguage}
-                    tone={currentTone}
-                    onCarouselSelected={(newContent) => {
-                      setPostContent(newContent);
-                      setSuccess('Carousel applied to post!');
-                    }}
-                  />
+                  {enhancementTab === 'media' && (
+                    <div className="space-y-4">
+                      {/* Image Prompt Section */}
+                      {editedImagePrompt && (
+                        <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                          <h4 className="text-sm font-semibold text-gray-900 mb-2">Image Generation Prompt</h4>
+                          <textarea
+                            value={editedImagePrompt}
+                            onChange={(e) => setEditedImagePrompt(e.target.value)}
+                            className="w-full min-h-[100px] px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 resize-y text-sm font-mono bg-white"
+                            placeholder="Image prompt will appear here..."
+                          />
+                        </div>
+                      )}
+
+                      {/* Generated Image Section */}
+                      {generatedImage && (
+                        <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                          <h4 className="text-sm font-semibold text-gray-900 mb-3">Generated Image</h4>
+                          <div className="rounded-lg overflow-hidden shadow-md border border-gray-200 bg-white">
+                            <img
+                              src={generatedImage}
+                              alt="Generated LinkedIn post image"
+                              className="w-full h-auto"
+                              onError={() => {
+                                setToast({ message: 'Failed to load image. The image URL might be invalid.', type: 'error' });
+                                setGeneratedImage(null);
+                              }}
+                            />
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const link = document.createElement('a');
+                                link.href = generatedImage;
+                                link.download = 'linkedin-post-image.png';
+                                link.target = '_blank';
+                                document.body.appendChild(link);
+                                link.click();
+                                document.body.removeChild(link);
+                                setToast({ message: 'Image download started!', type: 'success' });
+                              }}
+                              className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
+                            >
+                              Download
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(generatedImage);
+                                setToast({ message: 'Image URL copied to clipboard!', type: 'success' });
+                              }}
+                              className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
+                            >
+                              Copy URL
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
-            )}
+            </div>
+          </>
+        )}
 
         {/* Trending Posts Section - Full Width */}
         <div className="mt-6 lg:mt-8">
@@ -825,33 +977,57 @@ export default function Home() {
           />
         </div>
 
-        {/* Preview Section - Full Width */}
-        {postContent && selectedHashtags.length > 0 && (
-          <div className="bg-white p-6 sm:p-8 rounded-xl shadow-md border border-gray-200/50 card-hover mt-6 lg:mt-8">
-            <p className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-              <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-              </svg>
-              Preview (LinkedIn-compatible format with hashtags):
-            </p>
-            <div 
-              className="p-4 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl border border-gray-200 text-sm text-gray-700 whitespace-pre-wrap shadow-inner"
-              dir={currentLanguage === 'kurdish' ? 'rtl' : 'ltr'}
-              style={{ 
-                direction: currentLanguage === 'kurdish' ? 'rtl' : 'ltr',
-                textAlign: currentLanguage === 'kurdish' ? 'right' : 'left',
-                fontVariantNumeric: 'normal',
-                fontFeatureSettings: '"lnum"'
-              }}
-            >
-              {getFinalPost()}
+        {/* Enhanced Preview Section */}
+        {postContent && (
+          <div className="mt-8 lg:mt-10">
+            <div className="bg-white p-6 sm:p-8 rounded-xl shadow-md border border-gray-200/50 card-hover">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                  <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                  LinkedIn Preview
+                </h3>
+                <div className="text-sm text-gray-600">
+                  {htmlToPlainText(postContent).length} characters
+                  {selectedHashtags.length > 0 && ` • ${selectedHashtags.length} hashtag${selectedHashtags.length !== 1 ? 's' : ''}`}
+                </div>
+              </div>
+              <LinkedInPreview
+                content={postContent}
+                hashtags={selectedHashtags}
+                language={currentLanguage}
+                characterCount={htmlToPlainText(postContent).length}
+              />
             </div>
           </div>
         )}
       </div>
 
-      <DraftManager onLoadDraft={handleLoadDraft} />
+      {/* Floating Action Menu (Mobile) */}
+      <FloatingActionMenu
+        onDraftsClick={() => setIsDraftManagerOpen(true)}
+        onSavedPostsClick={() => setIsSavedPostsOpen(true)}
+        onCopyClick={postContent ? handleCopyToClipboard : undefined}
+        onExportClick={postContent ? handleExport : undefined}
+        draftsCount={draftsCount}
+        savedPostsCount={savedPostsCount}
+        canCopy={!!postContent}
+        canExport={!!postContent}
+      />
+
+      {/* Draft Manager */}
+      <DraftManager 
+        onLoadDraft={(draft) => {
+          handleLoadDraft(draft);
+          setIsDraftManagerOpen(false);
+        }}
+        isOpen={isDraftManagerOpen}
+        onClose={() => setIsDraftManagerOpen(false)}
+      />
+
+      {/* Saved Posts Panel */}
       <SavedPostsPanel 
         onUseAsInspiration={handleUseAsInspiration}
         onPostDeleted={() => {
@@ -859,8 +1035,11 @@ export default function Home() {
           getAllSavedPosts().then(savedPosts => {
             const ids = new Set(savedPosts.map(sp => sp.postId));
             setSavedPostIds(ids);
+            setSavedPostsCount(savedPosts.length);
           });
         }}
+        isOpen={isSavedPostsOpen}
+        onClose={() => setIsSavedPostsOpen(false)}
       />
     </main>
   );

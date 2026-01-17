@@ -6,11 +6,15 @@ import { getAllDrafts, deleteDraft } from '@/lib/storage';
 
 interface DraftManagerProps {
   onLoadDraft: (draft: Draft) => void;
+  isOpen?: boolean;
+  onClose?: () => void;
 }
 
-export default function DraftManager({ onLoadDraft }: DraftManagerProps) {
+export default function DraftManager({ onLoadDraft, isOpen: externalIsOpen, onClose }: DraftManagerProps) {
   const [drafts, setDrafts] = useState<Draft[]>([]);
-  const [isOpen, setIsOpen] = useState(false);
+  const [internalIsOpen, setInternalIsOpen] = useState(false);
+  const isOpen = externalIsOpen !== undefined ? externalIsOpen : internalIsOpen;
+  const setIsOpen = externalIsOpen !== undefined ? (onClose || (() => {})) : setInternalIsOpen;
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -99,23 +103,8 @@ export default function DraftManager({ onLoadDraft }: DraftManagerProps) {
   };
 
   if (!isOpen) {
-    return (
-      <button
-        type="button"
-        onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 right-6 bg-gray-900 text-white px-5 py-3 rounded-xl shadow-2xl hover:bg-gray-800 transition-all duration-200 font-semibold flex items-center gap-2 hover:scale-105 active:scale-95 z-40"
-      >
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-        </svg>
-        Drafts
-        {drafts.length > 0 && (
-          <span className="bg-blue-600 text-white text-xs px-2 py-0.5 rounded-full font-bold">
-            {drafts.length}
-          </span>
-        )}
-      </button>
-    );
+    // Hide button on mobile - will be shown in FAB menu instead
+    return null;
   }
 
   return (
