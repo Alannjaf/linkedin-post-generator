@@ -250,7 +250,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const prompt = buildPostPrompt({ context, language, tone, length });
+    const prompt = await buildPostPrompt({ context, language, tone, length });
     const content = await callOpenRouter(
       [{ role: "user", content: prompt }]
     );

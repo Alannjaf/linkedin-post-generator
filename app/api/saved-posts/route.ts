@@ -49,12 +49,14 @@ export async function POST(request: NextRequest) {
       throw new Error('Failed to save post');
     }
 
+    // Type assertion since saveTrendingPost returns the first element of array or null
+    const savedRow = saved as any;
     const savedPost: SavedTrendingPost = {
-      id: saved.id,
-      postId: saved.post_id,
-      post: saved.post_data as TrendingPost,
-      savedAt: saved.saved_at,
-      notes: saved.notes || undefined,
+      id: savedRow.id,
+      postId: savedRow.post_id,
+      post: savedRow.post_data as TrendingPost,
+      savedAt: savedRow.saved_at,
+      notes: savedRow.notes || undefined,
     };
 
     return NextResponse.json(savedPost, { status: 201 });

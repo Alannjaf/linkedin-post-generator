@@ -1,14 +1,28 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Language, Tone, PostLength } from '@/types';
+import { Language, Tone, PostLength, BuiltInTone } from '@/types';
 import { generatePost } from '@/lib/openrouter';
+import CustomToneManager from './CustomToneManager';
+import ToneMixer from './ToneMixer';
+import IndustryPresets from './IndustryPresets';
 
 interface PostGeneratorProps {
   onPostGenerated: (content: string, hashtags: string[], language: Language, tone: Tone, length: PostLength, context: string) => void;
   onError: (error: string) => void;
   initialContext?: string;
 }
+
+type ToneTab = 'built-in' | 'custom' | 'mix' | 'industry';
+
+const BUILT_IN_TONES: { value: BuiltInTone; label: string }[] = [
+  { value: 'professional', label: 'Professional' },
+  { value: 'casual', label: 'Casual' },
+  { value: 'friendly', label: 'Friendly' },
+  { value: 'inspirational', label: 'Inspirational' },
+  { value: 'informative', label: 'Informative' },
+  { value: 'comedy', label: 'Comedy' },
+];
 
 export default function PostGenerator({ onPostGenerated, onError, initialContext }: PostGeneratorProps) {
   const [context, setContext] = useState('');
@@ -23,6 +37,8 @@ export default function PostGenerator({ onPostGenerated, onError, initialContext
   const [tone, setTone] = useState<Tone>('professional');
   const [length, setLength] = useState<PostLength>('medium');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [toneTab, setToneTab] = useState<ToneTab>('built-in');
+  const [showToneSelector, setShowToneSelector] = useState(false);
 
   const handleGenerate = async () => {
     if (!context.trim()) {
@@ -82,19 +98,137 @@ export default function PostGenerator({ onPostGenerated, onError, initialContext
           <label htmlFor="tone" className="block text-sm font-semibold text-gray-900 mb-2">
             Tone
           </label>
-          <select
-            id="tone"
-            value={tone}
-            onChange={(e) => setTone(e.target.value as Tone)}
-            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white input-focus transition-all duration-200 font-medium"
-          >
-            <option value="professional">Professional</option>
-            <option value="casual">Casual</option>
-            <option value="friendly">Friendly</option>
-            <option value="inspirational">Inspirational</option>
-            <option value="informative">Informative</option>
-            <option value="comedy">Comedy</option>
-          </select>
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={() => setShowToneSelector(!showToneSelector)}
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white input-focus transition-all duration-200 font-medium text-left flex items-center justify-between"
+            >
+              <span>
+                {tone.startsWith('custom:') 
+                  ? `Custom Tone (ID: ${tone.split(':')[1]})`
+                  : tone.startsWith('mixed:')
+                  ? `Mixed Tone`
+                  : BUILT_IN_TONES.find(t => t.value === tone)?.label || tone}
+              </span>
+              <svg 
+                className={`w-5 h-5 transition-transform ${showToneSelector ? 'rotate-180' : ''}`}
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            {showToneSelector && (
+              <div className="border border-gray-300 rounded-lg bg-white p-4 shadow-lg">
+                {/* Tabs */}
+                <div className="flex border-b border-gray-200 mb-4">
+                  <button
+                    type="button"
+                    onClick={() => setToneTab('built-in')}
+                    className={`px-4 py-2 text-sm font-medium ${
+                      toneTab === 'built-in'
+                        ? 'border-b-2 border-blue-600 text-blue-600'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    Built-in
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setToneTab('custom')}
+                    className={`px-4 py-2 text-sm font-medium ${
+                      toneTab === 'custom'
+                        ? 'border-b-2 border-blue-600 text-blue-600'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    Custom
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setToneTab('mix')}
+                    className={`px-4 py-2 text-sm font-medium ${
+                      toneTab === 'mix'
+                        ? 'border-b-2 border-blue-600 text-blue-600'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    Mix
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setToneTab('industry')}
+                    className={`px-4 py-2 text-sm font-medium ${
+                      toneTab === 'industry'
+                        ? 'border-b-2 border-blue-600 text-blue-600'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    Industry
+                  </button>
+                </div>
+
+                {/* Tab Content */}
+                <div className="max-h-96 overflow-y-auto">
+                  {toneTab === 'built-in' && (
+                    <div className="space-y-2">
+                      {BUILT_IN_TONES.map((toneOption) => (
+                        <button
+                          key={toneOption.value}
+                          type="button"
+                          onClick={() => {
+                            setTone(toneOption.value);
+                            setShowToneSelector(false);
+                          }}
+                          className={`w-full px-4 py-2 text-left rounded-md transition-colors ${
+                            tone === toneOption.value
+                              ? 'bg-blue-100 text-blue-700'
+                              : 'hover:bg-gray-100'
+                          }`}
+                        >
+                          {toneOption.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {toneTab === 'custom' && (
+                    <CustomToneManager
+                      onToneSelected={(toneId) => {
+                        setTone(toneId);
+                        setShowToneSelector(false);
+                      }}
+                      onClose={() => setShowToneSelector(false)}
+                    />
+                  )}
+
+                  {toneTab === 'mix' && (
+                    <ToneMixer
+                      onToneMixCreated={(toneMix, toneId) => {
+                        setTone(toneId);
+                        setShowToneSelector(false);
+                      }}
+                      onClose={() => setShowToneSelector(false)}
+                      language={language}
+                    />
+                  )}
+
+                  {toneTab === 'industry' && (
+                    <IndustryPresets
+                      onPresetSelected={(toneId) => {
+                        setTone(toneId);
+                        setShowToneSelector(false);
+                      }}
+                      onClose={() => setShowToneSelector(false)}
+                    />
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         <div>

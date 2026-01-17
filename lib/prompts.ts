@@ -1,4 +1,5 @@
-import { Language, Tone, PostLength } from "@/types";
+import { Language, Tone, PostLength, BuiltInTone } from "@/types";
+import { getToneDescription } from "./tone-mixer";
 
 const LENGTH_TARGETS: Record<PostLength, number> = {
   short: 300,
@@ -6,7 +7,7 @@ const LENGTH_TARGETS: Record<PostLength, number> = {
   long: 1500,
 };
 
-const TONE_DESCRIPTIONS: Record<Tone, Record<Language, string>> = {
+export const TONE_DESCRIPTIONS: Record<BuiltInTone, Record<Language, string>> = {
   professional: {
     english: "professional and business-focused",
     kurdish: "پیشەیی و بزنس-مەركەز",
@@ -33,15 +34,15 @@ const TONE_DESCRIPTIONS: Record<Tone, Record<Language, string>> = {
   },
 };
 
-export function buildPostPrompt(params: {
+export async function buildPostPrompt(params: {
   context: string;
   language: Language;
   tone: Tone;
   length: PostLength;
-}): string {
+}): Promise<string> {
   const { context, language, tone, length } = params;
   const targetLength = LENGTH_TARGETS[length];
-  const toneDesc = TONE_DESCRIPTIONS[tone][language];
+  const toneDesc = await getToneDescription(tone, language);
 
   if (language === "kurdish") {
     return `تۆ بەرهەمهێنەری پۆستی LinkedIn بۆ کوردی. لەبەرگرتنەوەی دەقەکەم، پۆستێکی تەواوی LinkedIn دروست بکە.
