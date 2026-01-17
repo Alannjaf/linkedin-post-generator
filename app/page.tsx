@@ -6,7 +6,9 @@ import PostEditor from '@/components/PostEditor';
 import HashtagSuggestions from '@/components/HashtagSuggestions';
 import DraftManager from '@/components/DraftManager';
 import TrendingPostsPanel from '@/components/TrendingPostsPanel';
+import SavedPostsPanel from '@/components/SavedPostsPanel';
 import { saveDraft } from '@/lib/storage';
+import { savePost, getAllSavedPosts, deleteSavedPost } from '@/lib/saved-posts';
 import { Language, Tone, PostLength, Draft, TrendingPost } from '@/types';
 
 export default function Home() {
@@ -27,6 +29,21 @@ export default function Home() {
   const [isImagePromptExpanded, setIsImagePromptExpanded] = useState(false);
   const [isGeneratedImageExpanded, setIsGeneratedImageExpanded] = useState(false);
   const [inspirationContext, setInspirationContext] = useState<string>('');
+  const [savedPostIds, setSavedPostIds] = useState<Set<string>>(new Set());
+
+  // Load saved post IDs on mount
+  useEffect(() => {
+    const loadSavedPostIds = async () => {
+      try {
+        const savedPosts = await getAllSavedPosts();
+        const ids = new Set(savedPosts.map(sp => sp.postId));
+        setSavedPostIds(ids);
+      } catch (error) {
+        console.error('Failed to load saved post IDs:', error);
+      }
+    };
+    loadSavedPostIds();
+  }, []);
 
   // Clear messages after 5 seconds
   useEffect(() => {
@@ -168,6 +185,32 @@ export default function Home() {
         textarea.focus();
       }
     }, 100);
+  };
+
+  const handleSavePost = async (post: TrendingPost) => {
+    try {
+      await savePost(post);
+      setSavedPostIds(prev => new Set([...prev, post.id]));
+      setSuccess('Post saved! You can find it in Saved Posts.');
+      setError(null);
+    } catch (err) {
+      setError('Failed to save post');
+    }
+  };
+
+  const handleDeleteSavedPost = async (postId: string) => {
+    try {
+      const success = await deleteSavedPost(postId);
+      if (success) {
+        setSavedPostIds(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(postId);
+          return newSet;
+        });
+      }
+    } catch (err) {
+      console.error('Failed to delete saved post:', err);
+    }
   };
 
   const handleGenerateImagePrompt = async () => {
@@ -657,7 +700,11 @@ export default function Home() {
 
         {/* Trending Posts Section - Full Width */}
         <div className="mt-6 lg:mt-8">
-          <TrendingPostsPanel onUseAsInspiration={handleUseAsInspiration} />
+          <TrendingPostsPanel 
+            onUseAsInspiration={handleUseAsInspiration}
+            onSavePost={handleSavePost}
+            savedPostIds={savedPostIds}
+          />
         </div>
 
         {/* Preview Section - Full Width */}
@@ -687,6 +734,16 @@ export default function Home() {
       </div>
 
       <DraftManager onLoadDraft={handleLoadDraft} />
+      <SavedPostsPanel 
+        onUseAsInspiration={handleUseAsInspiration}
+        onPostDeleted={() => {
+          // Reload saved post IDs when a post is deleted
+          getAllSavedPosts().then(savedPosts => {
+            const ids = new Set(savedPosts.map(sp => sp.postId));
+            setSavedPostIds(ids);
+          });
+        }}
+      />
     </main>
   );
 }

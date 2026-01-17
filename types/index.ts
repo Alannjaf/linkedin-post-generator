@@ -61,3 +61,11 @@ export interface TrendingPostsSearchParams {
   minEngagement?: number;
 }
 
+export interface SavedTrendingPost {
+  id: number;
+  postId: string;
+  post: TrendingPost;
+  savedAt: string;
+  notes?: string;
+}
+

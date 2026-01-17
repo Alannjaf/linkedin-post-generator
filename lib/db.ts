@@ -151,3 +151,105 @@ export async function deleteCachedTrendingPosts(searchQuery: string) {
   }
 }
 
+// Initialize saved_trending_posts table if it doesn't exist
+export async function ensureSavedTrendingPostsTable() {
+  try {
+    await sql`
+      CREATE TABLE IF NOT EXISTS saved_trending_posts (
+        id SERIAL PRIMARY KEY,
+        post_id TEXT NOT NULL UNIQUE,
+        post_data JSONB NOT NULL,
+        saved_at TIMESTAMP DEFAULT NOW(),
+        notes TEXT
+      )
+    `;
+  } catch (error) {
+    console.error('Error ensuring saved_trending_posts table:', error);
+  }
+}
+
+// Save a trending post
+export async function saveTrendingPost(post: any, notes?: string) {
+  try {
+    await ensureSavedTrendingPostsTable();
+    const result = await sql`
+      INSERT INTO saved_trending_posts (
+        post_id,
+        post_data,
+        notes
+      ) VALUES (
+        ${post.id},
+        ${JSON.stringify(post)}::jsonb,
+        ${notes || null}
+      )
+      ON CONFLICT (post_id) 
+      DO UPDATE SET
+        post_data = ${JSON.stringify(post)}::jsonb,
+        notes = ${notes || null},
+        saved_at = NOW()
+      RETURNING 
+        id,
+        post_id,
+        post_data,
+        saved_at,
+        notes
+    `;
+    return Array.isArray(result) && result.length > 0 ? result[0] : null;
+  } catch (error) {
+    console.error('Error saving trending post:', error);
+    throw error;
+  }
+}
+
+// Get all saved trending posts
+export async function getAllSavedTrendingPosts() {
+  try {
+    await ensureSavedTrendingPostsTable();
+    const result = await sql`
+      SELECT 
+        id,
+        post_id,
+        post_data,
+        saved_at,
+        notes
+      FROM saved_trending_posts
+      ORDER BY saved_at DESC
+    `;
+    return Array.isArray(result) ? result : [];
+  } catch (error) {
+    console.error('Error getting saved trending posts:', error);
+    return [];
+  }
+}
+
+// Delete a saved trending post by post_id
+export async function deleteSavedTrendingPost(postId: string) {
+  try {
+    await ensureSavedTrendingPostsTable();
+    await sql`
+      DELETE FROM saved_trending_posts
+      WHERE post_id = ${postId}
+    `;
+  } catch (error) {
+    console.error('Error deleting saved trending post:', error);
+    throw error;
+  }
+}
+
+// Check if a post is saved
+export async function isPostSaved(postId: string) {
+  try {
+    await ensureSavedTrendingPostsTable();
+    const result = await sql`
+      SELECT id
+      FROM saved_trending_posts
+      WHERE post_id = ${postId}
+      LIMIT 1
+    `;
+    return Array.isArray(result) && result.length > 0;
+  } catch (error) {
+    console.error('Error checking if post is saved:', error);
+    return false;
+  }
+}
+

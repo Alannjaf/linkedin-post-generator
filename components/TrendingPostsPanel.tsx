@@ -6,9 +6,11 @@ import TrendingPostCard from './TrendingPostCard';
 
 interface TrendingPostsPanelProps {
   onUseAsInspiration?: (post: TrendingPost) => void;
+  onSavePost?: (post: TrendingPost) => void;
+  savedPostIds?: Set<string>;
 }
 
-export default function TrendingPostsPanel({ onUseAsInspiration }: TrendingPostsPanelProps) {
+export default function TrendingPostsPanel({ onUseAsInspiration, onSavePost, savedPostIds }: TrendingPostsPanelProps) {
   const [query, setQuery] = useState('');
   const [posts, setPosts] = useState<TrendingPost[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -189,6 +191,8 @@ export default function TrendingPostsPanel({ onUseAsInspiration }: TrendingPosts
               key={post.id}
               post={post}
               onUseAsInspiration={onUseAsInspiration}
+              onSavePost={onSavePost}
+              isSaved={savedPostIds?.has(post.id)}
             />
           ))}
         </div>

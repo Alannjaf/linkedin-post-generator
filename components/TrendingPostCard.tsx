@@ -5,9 +5,11 @@ import { TrendingPost } from '@/types';
 interface TrendingPostCardProps {
   post: TrendingPost;
   onUseAsInspiration?: (post: TrendingPost) => void;
+  onSavePost?: (post: TrendingPost) => void;
+  isSaved?: boolean;
 }
 
-export default function TrendingPostCard({ post, onUseAsInspiration }: TrendingPostCardProps) {
+export default function TrendingPostCard({ post, onUseAsInspiration, onSavePost, isSaved }: TrendingPostCardProps) {
   const formatTime = (timeStr: string) => {
     // Extract time info from strings like "2d •" or "4d •"
     return timeStr.trim() || 'Recently';
@@ -115,6 +117,34 @@ export default function TrendingPostCard({ post, onUseAsInspiration }: TrendingP
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
             </svg>
           </a>
+          {onSavePost && (
+            <button
+              type="button"
+              onClick={() => onSavePost(post)}
+              className={`px-3 py-1.5 text-xs rounded-lg transition-colors font-medium flex items-center gap-1 ${
+                isSaved
+                  ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+              title={isSaved ? 'Saved' : 'Save for later'}
+            >
+              {isSaved ? (
+                <>
+                  <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M5 4a2 2 0 012-2h6a2 2 0 012 2v14l-5-2.5L5 18V4z" />
+                  </svg>
+                  Saved
+                </>
+              ) : (
+                <>
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                  </svg>
+                  Save
+                </>
+              )}
+            </button>
+          )}
           {onUseAsInspiration && (
             <button
               type="button"
