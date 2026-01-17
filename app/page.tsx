@@ -5,8 +5,9 @@ import PostGenerator from '@/components/PostGenerator';
 import PostEditor from '@/components/PostEditor';
 import HashtagSuggestions from '@/components/HashtagSuggestions';
 import DraftManager from '@/components/DraftManager';
+import TrendingPostsPanel from '@/components/TrendingPostsPanel';
 import { saveDraft } from '@/lib/storage';
-import { Language, Tone, PostLength, Draft } from '@/types';
+import { Language, Tone, PostLength, Draft, TrendingPost } from '@/types';
 
 export default function Home() {
   const [postContent, setPostContent] = useState('');
@@ -25,6 +26,7 @@ export default function Home() {
   const [editedImagePrompt, setEditedImagePrompt] = useState<string>('');
   const [isImagePromptExpanded, setIsImagePromptExpanded] = useState(false);
   const [isGeneratedImageExpanded, setIsGeneratedImageExpanded] = useState(false);
+  const [inspirationContext, setInspirationContext] = useState<string>('');
 
   // Clear messages after 5 seconds
   useEffect(() => {
@@ -45,6 +47,7 @@ export default function Home() {
     setCurrentTone(tone);
     setCurrentLength(length);
     setOriginalContext(context);
+    setInspirationContext(''); // Clear inspiration context after generating
     setImagePrompt('');
     setEditedImagePrompt('');
     setGeneratedImage(null);
@@ -148,6 +151,23 @@ export default function Home() {
       setError(null);
       setSuccess(null);
     }
+  };
+
+  const handleUseAsInspiration = (post: TrendingPost) => {
+    // Use the trending post content as context for generating a new post
+    const inspirationText = `Inspired by this trending post:\n\n${post.content}\n\nCreate a similar but original post on this topic.`;
+    setInspirationContext(inspirationText);
+    setOriginalContext(inspirationText);
+    setSuccess('Post loaded as inspiration! Review and edit the context, then click Generate Post.');
+    setError(null);
+    // Scroll to the post generator
+    setTimeout(() => {
+      const textarea = document.querySelector('#context') as HTMLTextAreaElement;
+      if (textarea) {
+        textarea.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        textarea.focus();
+      }
+    }, 100);
   };
 
   const handleGenerateImagePrompt = async () => {
@@ -331,6 +351,7 @@ export default function Home() {
               <PostGenerator
                 onPostGenerated={handlePostGenerated}
                 onError={handleError}
+                initialContext={inspirationContext}
               />
             </div>
 
@@ -633,6 +654,11 @@ export default function Home() {
                 )}
               </div>
             )}
+
+        {/* Trending Posts Section - Full Width */}
+        <div className="mt-6 lg:mt-8">
+          <TrendingPostsPanel onUseAsInspiration={handleUseAsInspiration} />
+        </div>
 
         {/* Preview Section - Full Width */}
         {postContent && selectedHashtags.length > 0 && (

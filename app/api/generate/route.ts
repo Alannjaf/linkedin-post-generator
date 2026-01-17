@@ -241,7 +241,7 @@ async function callOpenRouter(
 export async function POST(request: NextRequest) {
   try {
     const body: PostGenerationParams = await request.json();
-    const { context, language, tone, length } = body;
+    const { context, language, tone, length, trendingHashtags } = body;
 
     if (!context || !language || !tone || !length) {
       return NextResponse.json(
@@ -280,6 +280,7 @@ export async function POST(request: NextRequest) {
         const hashtagPrompt = buildHashtagPrompt({
           postContent: cleanContent,
           language,
+          trendingHashtags: trendingHashtags,
         });
         // Generate hashtags separately
         const hashtagContent = await callOpenRouter(

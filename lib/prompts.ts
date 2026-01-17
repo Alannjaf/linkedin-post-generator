@@ -89,16 +89,23 @@ CRITICAL REQUIREMENTS:
 export function buildHashtagPrompt(params: {
   postContent: string;
   language: Language;
+  trendingHashtags?: string[];
 }): string {
-  const { postContent, language } = params;
+  const { postContent, language, trendingHashtags } = params;
+
+  const trendingContext = trendingHashtags && trendingHashtags.length > 0
+    ? (language === "kurdish"
+        ? `\n\nهاشتاگە بەناوبانگەکان لە پۆستە هاوشێوەکاندا: ${trendingHashtags.map(t => `#${t}`).join(', ')}\nئەم هاشتاگانە لە پۆستە بەناوبانگەکاندا بەکاردەهێنران. لەبەرگرتنەوەیان بکە بۆ پێشنیارەکانت.`
+        : `\n\nTrending hashtags from similar popular posts: ${trendingHashtags.map(t => `#${t}`).join(', ')}\nThese hashtags were used in popular posts on similar topics. Consider them for your suggestions.`)
+    : '';
 
   if (language === "kurdish") {
-    return `بەپێی پۆستی خوارەوە، 3-5 هاشتاگی گونجاو پێشنیار بکە بۆ LinkedIn. تەنها هاشتاگەکان بنووسە، هەر یەک لەسەر هێڵێکی جیا، بەبێ #.
+    return `بەپێی پۆستی خوارەوە، 3-5 هاشتاگی گونجاو پێشنیار بکە بۆ LinkedIn. تەنها هاشتاگەکان بنووسە، هەر یەک لەسەر هێڵێکی جیا، بەبێ #.${trendingContext}
 
 پۆست:
 ${postContent}`;
   } else {
-    return `Based on the following LinkedIn post, suggest 3-5 relevant hashtags. Write only the hashtags, one per line, without the # symbol.
+    return `Based on the following LinkedIn post, suggest 3-5 relevant hashtags. Write only the hashtags, one per line, without the # symbol.${trendingContext}
 
 Post:
 ${postContent}`;

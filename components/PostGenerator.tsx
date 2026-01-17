@@ -1,16 +1,24 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Language, Tone, PostLength } from '@/types';
 import { generatePost } from '@/lib/openrouter';
 
 interface PostGeneratorProps {
   onPostGenerated: (content: string, hashtags: string[], language: Language, tone: Tone, length: PostLength, context: string) => void;
   onError: (error: string) => void;
+  initialContext?: string;
 }
 
-export default function PostGenerator({ onPostGenerated, onError }: PostGeneratorProps) {
+export default function PostGenerator({ onPostGenerated, onError, initialContext }: PostGeneratorProps) {
   const [context, setContext] = useState('');
+
+  // Update context when initialContext prop changes
+  useEffect(() => {
+    if (initialContext) {
+      setContext(initialContext);
+    }
+  }, [initialContext]);
   const [language, setLanguage] = useState<Language>('english');
   const [tone, setTone] = useState<Tone>('professional');
   const [length, setLength] = useState<PostLength>('medium');
