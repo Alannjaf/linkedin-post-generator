@@ -33,72 +33,287 @@ export async function POST(request: NextRequest) {
       throw new Error("OpenRouter API key is not configured");
     }
 
-    // Always generate the prompt in English, but note if Kurdish text should be included in the image
     const isKurdishPost = language === "kurdish";
     const contextSection = context ? `\n\nOriginal Context/Draft:\n${context}` : "";
     const toneSection = tone ? `\n\nTone of the post: ${tone}` : "";
-    
-    const analysisPrompt = `You are an image prompt generator for LinkedIn posts. Based on the following post content, tone, and original context, create a detailed, unique image generation prompt that accurately represents and complements the post.
 
-Post Content:
+    // Extract Kurdish text for images (questions, key phrases)
+    let kurdishTextToInclude = "";
+    if (isKurdishPost) {
+      // Extract questions from Kurdish text (lines containing ؟)
+      const kurdishQuestions = postContent
+        .split('\n')
+        .filter((line: string) => line.includes('؟'))
+        .map((line: string) => line.trim());
+      
+      if (kurdishQuestions.length > 0) {
+        // Prioritize engagement questions (containing question words)
+        kurdishTextToInclude = kurdishQuestions.find((q: string) => 
+          q.includes('چی') ||  // what
+          q.includes('کێ') ||  // who  
+          q.includes('چۆن') || // how
+          q.includes('کەی') || // when
+          q.includes('کام')    // which
+        ) || kurdishQuestions[0]; // fallback to first question
+      }
+      
+      // If no questions found, look for key phrases with emojis or emphasis
+      if (!kurdishTextToInclude) {
+        const emphasisLines = postContent
+          .split('\n')
+          .filter((line: string) => line.includes('!') || line.includes('👇') || line.includes('✨'))
+          .map((line: string) => line.trim());
+        
+        if (emphasisLines.length > 0) {
+          kurdishTextToInclude = emphasisLines[0];
+        }
+      }
+    }
+
+    // STEP 1: Detect post type
+    const postTypeAnalyzer = `Analyze this post and identify its primary type in ONE WORD:
+
+Post: ${postContent}
+
+Choose ONLY ONE from these options:
+- ENGAGEMENT (asking for comments, questions, community input, discussions)
+- SHOWCASE (displaying finished work, achievements, completed projects)
+- EDUCATIONAL (teaching, explaining, sharing knowledge, tips, tutorials)
+- ANNOUNCEMENT (launching something new, revealing news, updates)
+- STORYTELLING (sharing personal journey, experience, reflection)
+- BUILDING (showing work in progress, development process, creating)
+
+Answer with just the single word that best matches.`;
+
+    const typeResponse = await fetch(OPENROUTER_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+        "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+        "X-Title": "LinkedIn Post Generator",
+      },
+      body: JSON.stringify({
+        model: DEFAULT_MODEL,
+        messages: [{ role: "user", content: postTypeAnalyzer }],
+        temperature: 0.3,
+        max_tokens: 50,
+      }),
+    });
+
+    if (!typeResponse.ok) {
+      throw new Error("Failed to detect post type");
+    }
+
+    const typeData: OpenRouterResponse = await typeResponse.json();
+    const postType = typeData.choices[0]?.message?.content?.trim().toUpperCase() || "GENERAL";
+
+    // STEP 2: Define type-specific guidance
+    const postTypeGuidance: Record<string, string> = {
+      ENGAGEMENT: `
+🎯 This is an ENGAGEMENT post. The image MUST:
+- Show community interaction visually (speech bubbles, comments, dialogue elements)
+- Include the actual question or call-to-action text prominently${isKurdishPost ? ' in Kurdish from the post' : ''}
+- Visualize people responding, participating, or contributing
+- Create an inviting, open atmosphere that encourages viewer to comment
+- Show the author actively receiving, welcoming, or processing community input
+- Use warm, collaborative colors and approachable composition
+- Make it feel like a conversation, not a lecture`,
+      
+      SHOWCASE: `
+🎯 This is a SHOWCASE post. The image MUST:
+- Display the finished product, achievement, or result prominently as the hero
+- Use professional, polished, high-quality styling
+- Show completion, success, and accomplishment
+- Celebrate the achievement with proud, confident composition
+- Make the product/result crystal clear and attractive
+- Use professional photography style or polished illustration`,
+      
+      EDUCATIONAL: `
+🎯 This is an EDUCATIONAL post. The image MUST:
+- Use clear, organized visual hierarchy with structured layout
+- Show teaching, knowledge transfer, or learning in action
+- Include organized elements (numbered steps, labeled sections, clear categories)
+- Create a learning-friendly, accessible atmosphere
+- Make information visually digestible and easy to follow
+- Use infographic style or clear instructional visuals`,
+      
+      BUILDING: `
+🎯 This is a BUILDING/DEVELOPMENT post. The image MUST:
+- Show active work in progress, not finished products
+- Visualize the creation, construction, or development process
+- Include tools, code, construction elements, or building materials
+- Create energy and momentum of active work happening now
+- Show transformation in progress or construction underway
+- Use dynamic composition suggesting ongoing activity`,
+      
+      STORYTELLING: `
+🎯 This is a STORYTELLING post. The image MUST:
+- Show journey, progression, or narrative flow (often left to right or bottom to top)
+- Use visual storytelling with clear beginning, middle, progression
+- Be authentic, relatable, and emotionally resonant
+- Show personal transformation, growth, or change over time
+- Create emotional connection and human element
+- Use documentary or lifestyle photography style`,
+      
+      ANNOUNCEMENT: `
+🎯 This is an ANNOUNCEMENT post. The image MUST:
+- Be bold, eye-catching, and immediately attention-grabbing
+- Clearly communicate the news or announcement visually
+- Use celebratory, exciting, or impactful tone and composition
+- Make the announcement the unmistakable focal point
+- Create buzz, excitement, or sense of importance
+- Use dynamic, energetic visual treatment`,
+    };
+
+    const specificGuidance = postTypeGuidance[postType] || `
+🎯 This is a GENERAL post. The image should:
+- Clearly represent the main message of the post
+- Use appropriate professional styling for LinkedIn
+- Match the tone and intent of the content`;
+
+    // STEP 3: Create comprehensive prompt with examples
+    
+    // For Kurdish posts with extracted text, create a mandatory template
+    const kurdishTextRequirement = isKurdishPost && kurdishTextToInclude ? `
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🚨 MANDATORY REQUIREMENT - THIS OVERRIDES ALL OTHER INSTRUCTIONS 🚨
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+This is a KURDISH ENGAGEMENT POST. You MUST include this exact text in the image:
+
+"${kurdishTextToInclude}"
+
+REQUIRED FORMAT in your image prompt:
+Your prompt MUST contain this exact phrase somewhere:
+"A prominent [banner/whiteboard/sign/display] showing Kurdish text: ${kurdishTextToInclude}"
+
+This is NOT optional. This is NOT negotiable. Even if you think text overlays 
+aren't good for LinkedIn, KURDISH ENGAGEMENT POSTS REQUIRE THE QUESTION TO BE VISIBLE.
+
+The text must be:
+✓ In the exact Arabic script shown above (no Latin alphabet)
+✓ Prominent and readable (large size, clear placement)
+✓ The focal point that invites comments
+✓ Integrated into the scene (on whiteboard, banner, screen, sign, etc.)
+
+IF YOUR PROMPT DOES NOT INCLUDE THIS EXACT KURDISH TEXT, IT IS WRONG.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+` : '';
+
+    const analysisPrompt = `You are an expert image prompt generator for LinkedIn posts. Your goal is to create detailed, unique prompts that generate images perfectly aligned with each post's specific purpose and call-to-action.
+
+${kurdishTextRequirement}
+
+POST CONTENT:
 ${postContent}${toneSection}${contextSection}
 
-CRITICAL REQUIREMENTS FOR UNIQUENESS:
-- Each prompt MUST be unique and tailored specifically to this post's content
-- AVOID repetitive or generic styles like "3D isometric", "isometric illustration", "3D render", or similar overused styles
-- Analyze the post content deeply to determine the most appropriate visual style from these options:
-  * Professional photography (for real-world, authentic content)
-  * Flat design or modern illustration (for clean, conceptual content)
-  * Abstract or minimalist design (for philosophical or high-level concepts)
-  * Documentary or editorial style (for news, insights, or stories)
-  * Infographic-style visualization (for data or process content)
-  * Environmental or lifestyle photography (for personal or cultural content)
-- Choose the style that best matches the post's tone, subject matter, and message
-- Vary visual approaches: some posts may need photography, others illustration, others abstract design
-- The style should feel fresh and appropriate for the specific content, not generic
+POST TYPE IDENTIFIED: ${postType}
 
-Requirements:
-- The prompt should be for a professional, high-quality LinkedIn image
-- It should intelligently reflect the core message and themes of the post
-- It should be professional, modern, and clean
-- It should visually represent the post's content in a graphic way${
-      isKurdishPost
-        ? `
-- CRITICAL FOR KURDISH POSTS: Since this is a Kurdish post, you MUST include Kurdish text in the image whenever appropriate
-- Identify key phrases, quotes, or important concepts from the post content and render them in Kurdish in the image
-- Examples of when to include Kurdish text: motivational quotes, statistics, key takeaways, headlines, signs, banners, or any text that enhances the visual message
-- When including Kurdish text in the image, specify it exactly as: "Kurdish text: [exact Kurdish text from post]" or "sign displaying: [Kurdish text]" or "banner with text: [Kurdish text]"
-- For abstract or conceptual images where text would distract, make the image purely visual but use Kurdish cultural elements, colors, or imagery that resonates with Kurdish context
-- The image should feel authentic to Kurdish culture and language when appropriate`
-        : `
-- For English posts, the image should generally be visual-only without text overlays
-- Exception: Include text only when it's essential for the message (quotes, statistics, key takeaways)
-- When including text in English, make it minimal and integrated naturally into the design`
-    }
-- It should be suitable for business social media platform
-- Include specific visual elements, colors, composition, and style that match the post's tone and content
-- The prompt should be detailed enough for an image generation AI to create a relevant image
-- IMPORTANT: Write the entire prompt in English${
-      isKurdishPost
-        ? ", but when Kurdish text is needed in the image (as part of signs, banners, or graphics), include the exact Kurdish text from the post"
-        : ""
-    }
+${specificGuidance}
 
-Style Variety Examples (use as inspiration, not to copy):
-- For technology posts: Consider modern tech photography, abstract data visualizations, or clean UI mockups
-- For business posts: Consider professional office photography, collaboration scenes, or business concept illustrations
-- For personal/cultural posts: Consider lifestyle photography, cultural elements, or authentic scenes
-- For motivational posts: Consider inspiring landscapes, abstract growth concepts, or uplifting imagery
+LEARN FROM THESE EXAMPLES:
 
-Write only the image generation prompt in English, nothing else. Make it unique to this specific post content.`;
+❌ BAD Example - Generic Engagement Post:
+"Abstract illustration of technology and innovation with people collaborating"
 
+✅ GOOD Example - Engagement Post:
+"Warm, inviting flat vector illustration centered on a friendly developer at a laptop. Multiple colorful speech bubbles and comment boxes flow in from left and top, each containing simple problem icons (traffic, clock, confusion). Prominent banner displays: '[Actual question from post]' in large, readable text. Developer actively catches inputs and transforms them into glowing app mockups on right. Warm coral and amber tones for problems, cool tech blues for solutions. Collaborative, conversational atmosphere inviting participation."
+
+${isKurdishPost && kurdishTextToInclude ? `
+✅ GOOD Example - Kurdish Engagement Post (LIKE THIS ONE):
+"Community-focused illustration with confident developer at modern desk with laptop. Multiple warm-colored speech bubbles with problem icons (car in traffic, clock, confused face) flow from left toward the developer. BEHIND THE DEVELOPER, a large digital whiteboard/screen prominently displays in Kurdish text: ${kurdishTextToInclude} in clear, bold font. Developer actively processes these inputs, with sleek blue app mockups emerging on the right. Warm orange/coral tones (left) transition to cool neon blue (right). Inviting, collaborative atmosphere. The Kurdish question is the FOCAL POINT inviting engagement."
+
+❌ WRONG for this Kurdish post:
+"Developer at computer transforming problems into solutions, no text overlays" - MISSING THE REQUIRED KURDISH TEXT!
+` : ''}
+
+❌ BAD Example - Educational Post:
+"Person teaching with a computer screen"
+
+✅ GOOD Example - Educational Post:
+"Clean infographic-style layout with clear 5-section vertical or horizontal flow. Each section numbered and visually distinct with icons. Central teaching figure or presentation element. Professional blue and white palette. Clear hierarchy, easy to scan, knowledge-transfer focused. Educational, organized, approachable."
+
+❌ BAD Example - Showcase Post:
+"3D isometric app floating in space"
+
+✅ GOOD Example - Showcase Post:
+"Professional product photography showing sleek app interface on iPhone, iPad, and MacBook arranged in modern composition. Polished UI clearly visible on all screens. Subtle gradient background (navy to deep purple). Confident, premium feel. Celebration of finished product. Sharp, high-quality, professional showcase."
+
+${isKurdishPost ? `
+🔴 CRITICAL FOR KURDISH POSTS - EXACT TEXT REQUIREMENT:
+
+${kurdishTextToInclude ? `
+EXACT KURDISH TEXT TO INCLUDE IN THE IMAGE:
+"${kurdishTextToInclude}"
+
+YOU MUST USE THIS EXACT TEXT CHARACTER-FOR-CHARACTER IN ARABIC SCRIPT.
+` : ''}
+
+MANDATORY RULES FOR KURDISH TEXT:
+1. Use the EXACT Arabic script characters as shown above (ئ، ە، ڕ، ێ، ۆ، etc.)
+2. DO NOT translate to Latin/English alphabet (no a, e, i, o, u, k, ch, etc.)
+3. DO NOT simplify, paraphrase, or shorten the text
+4. DO NOT change dialects - preserve Sorani/Kurmanji exactly as written
+5. Copy and paste the Kurdish text EXACTLY - character-for-character match required
+
+When specifying in your prompt, write:
+"Prominent text banner/sign/whiteboard displaying in Kurdish Arabic script: ${kurdishTextToInclude || '[Kurdish text]'}"
+
+Examples of CORRECT vs WRONG:
+❌ WRONG: "Text: Kêşet çi ye?" (Latin script - NEVER do this)
+❌ WRONG: "Text: What's your problem?" (English translation - NEVER do this)
+❌ WRONG: "Kurdish text: چی؟" (Shortened - maintain full question)
+✅ CORRECT: "Text in Kurdish: ${kurdishTextToInclude || 'گەورەترین سەرێشەی ڕۆژانەتان چییە؟'}" (Exact match)
+
+Kurdish Text Placement:
+- For questions: Large, prominent banner, whiteboard, or speech bubble
+- Make it the FOCAL POINT that invites engagement
+- Use clear, readable Kurdish font
+- Ensure text is large enough to be the main call-to-action
+
+Kurdish Cultural Elements:
+- Consider subtle use of Kurdish flag colors (red, white, green) in design accents
+- Include authentic cultural visual elements when appropriate
+- Make it feel genuine to Kurdish digital culture
+- Avoid stereotypes - focus on modern, professional Kurdish context
+` : `
+For English posts:
+- Generally avoid text overlays unless essential to the message
+- If including text (quotes, statistics, key phrases), integrate naturally
+- Keep text minimal and purposeful
+`}
+
+STYLE VARIETY REQUIREMENTS:
+- NEVER default to "3D isometric" or other overused styles
+- Match style to content purpose:
+  * Engagement posts → Warm, collaborative illustrations
+  * Showcases → Professional photography or polished renders
+  * Educational → Clean infographics or structured layouts
+  * Stories → Documentary/lifestyle photography
+  * Building → Dynamic work-in-progress visuals
+  * Announcements → Bold, energetic graphics
+
+CRITICAL REQUIREMENTS:
+1. The image must DIRECTLY support the post's PRIMARY PURPOSE (what action does it want?)
+2. Be specific about composition, colors, elements, and atmosphere
+3. Make it unique to THIS specific post, not generic
+4. Focus on what the author is DOING/ASKING, not just the topic
+5. Create professional LinkedIn-appropriate imagery
+6. Be detailed enough for an AI image generator to create accurately
+${isKurdishPost && kurdishTextToInclude ? `
+7. 🚨 MUST INCLUDE THE KURDISH TEXT: ${kurdishTextToInclude} - THIS IS MANDATORY
+` : ''}
+
+Now create a detailed image generation prompt for the post above. ${isKurdishPost && kurdishTextToInclude ? `REMEMBER: You MUST include the Kurdish text "${kurdishTextToInclude}" prominently in your image prompt description.` : ''} Write ONLY the image prompt in English (with exact Kurdish text specified when needed), nothing else. Make it specific, purposeful, and aligned with the ${postType} post type.`;
+
+    // STEP 4: Generate the actual image prompt
     const response = await fetch(OPENROUTER_API_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
-        "HTTP-Referer":
-          process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+        "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
         "X-Title": "LinkedIn Post Generator",
       },
       body: JSON.stringify({
@@ -109,7 +324,7 @@ Write only the image generation prompt in English, nothing else. Make it unique 
             content: analysisPrompt,
           },
         ],
-        temperature: 0.9,
+        temperature: 0.7,
       }),
     });
 
@@ -132,7 +347,77 @@ Write only the image generation prompt in English, nothing else. Make it unique 
       throw new Error("No prompt generated");
     }
 
-    return NextResponse.json({ prompt: generatedPrompt });
+    // Validation: Check if Kurdish text is included when required
+    if (isKurdishPost && kurdishTextToInclude) {
+      const hasKurdishText = generatedPrompt.includes(kurdishTextToInclude) || 
+                            generatedPrompt.includes('Kurdish text') ||
+                            generatedPrompt.includes('Kurdish:');
+      
+      if (!hasKurdishText) {
+        console.warn('Generated prompt missing Kurdish text, regenerating with stricter instructions...');
+        
+        // Retry with even more forceful prompt
+        const retryPrompt = `CRITICAL ERROR: Your previous response was missing required Kurdish text.
+
+This is a Kurdish engagement post asking: "${kurdishTextToInclude}"
+
+You MUST create an image prompt that includes this exact text prominently displayed in the image.
+
+REQUIRED: Your response must contain a phrase like:
+"[whiteboard/banner/sign] displaying the Kurdish text: ${kurdishTextToInclude}"
+
+Create the image prompt now, ensuring the Kurdish question is prominently featured:`;
+
+        const retryResponse = await fetch(OPENROUTER_API_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+            "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+            "X-Title": "LinkedIn Post Generator",
+          },
+          body: JSON.stringify({
+            model: DEFAULT_MODEL,
+            messages: [
+              { role: "user", content: analysisPrompt },
+              { role: "assistant", content: generatedPrompt },
+              { role: "user", content: retryPrompt }
+            ],
+            temperature: 0.6,
+          }),
+        });
+
+        if (retryResponse.ok) {
+          const retryData: OpenRouterResponse = await retryResponse.json();
+          const retryGeneratedPrompt = retryData.choices[0]?.message?.content?.trim();
+          
+          if (retryGeneratedPrompt && retryGeneratedPrompt.includes(kurdishTextToInclude)) {
+            return NextResponse.json({ 
+              prompt: retryGeneratedPrompt,
+              postType: postType,
+              retried: true
+            });
+          }
+        }
+        
+        // If retry failed, manually inject the Kurdish text requirement
+        const enhancedPrompt = generatedPrompt.replace(
+          /(developer|desk|laptop|workspace)/i,
+          `$1. Behind the scene, a prominent digital whiteboard or banner displays in large, clear Kurdish text: "${kurdishTextToInclude}"`
+        );
+        
+        return NextResponse.json({ 
+          prompt: enhancedPrompt,
+          postType: postType,
+          manuallyEnhanced: true
+        });
+      }
+    }
+
+    return NextResponse.json({ 
+      prompt: generatedPrompt,
+      postType: postType
+    });
   } catch (error) {
     console.error("Error generating image prompt:", error);
     const errorMessage =
