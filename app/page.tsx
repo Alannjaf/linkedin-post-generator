@@ -9,6 +9,7 @@ import TrendingPostsPanel from '@/components/TrendingPostsPanel';
 import SavedPostsPanel from '@/components/SavedPostsPanel';
 import { saveDraft } from '@/lib/storage';
 import { savePost, getAllSavedPosts, deleteSavedPost } from '@/lib/saved-posts';
+import { convertHtmlToLinkedInFormat, htmlToPlainText, plainTextToHtml } from '@/lib/linkedin-formatter';
 import { Language, Tone, PostLength, Draft, TrendingPost } from '@/types';
 
 export default function Home() {
@@ -30,6 +31,7 @@ export default function Home() {
   const [isGeneratedImageExpanded, setIsGeneratedImageExpanded] = useState(false);
   const [inspirationContext, setInspirationContext] = useState<string>('');
   const [savedPostIds, setSavedPostIds] = useState<Set<string>>(new Set());
+  const [useUnicodeFormatting, setUseUnicodeFormatting] = useState<boolean>(true);
 
   // Load saved post IDs on mount
   useEffect(() => {
@@ -57,7 +59,14 @@ export default function Home() {
   }, [error, success]);
 
   const handlePostGenerated = (content: string, generatedHashtags: string[], language: Language, tone: Tone, length: PostLength, context: string) => {
-    setPostContent(content);
+    // Convert plain text to HTML if it's not already HTML
+    // Simple check: if it doesn't contain HTML tags, convert it
+    let htmlContent = content;
+    if (content && !content.includes('<') && !content.includes('>')) {
+      htmlContent = plainTextToHtml(content);
+    }
+    
+    setPostContent(htmlContent);
     setHashtags(generatedHashtags);
     setSelectedHashtags([]);
     setCurrentLanguage(language);
@@ -92,7 +101,7 @@ export default function Home() {
     const finalPost = getFinalPost();
     try {
       await navigator.clipboard.writeText(finalPost);
-      setSuccess('Copied to clipboard!');
+      setSuccess('Copied to clipboard! Paste into LinkedIn to see formatting.');
       setError(null);
     } catch (err) {
       setError('Failed to copy to clipboard');
@@ -121,10 +130,12 @@ export default function Home() {
     }
 
     try {
-      const title = postContent.substring(0, 50) || 'Untitled Draft';
+      // Get plain text title from HTML content
+      const plainTextContent = htmlToPlainText(postContent);
+      const title = plainTextContent.substring(0, 50) || 'Untitled Draft';
       await saveDraft({
         title,
-        content: postContent,
+        content: postContent, // Save as HTML
         language: currentLanguage,
         tone: currentTone,
         length: currentLength,
@@ -142,7 +153,16 @@ export default function Home() {
   };
 
   const handleLoadDraft = (draft: Draft) => {
-    setPostContent(draft.content);
+    // Handle backward compatibility: convert plain text to HTML if needed
+    let content = draft.content;
+    
+    // Check if content is plain text (doesn't contain HTML tags)
+    // Simple heuristic: if it doesn't contain < and >, it's likely plain text
+    if (content && !content.includes('<') && !content.includes('>')) {
+      content = plainTextToHtml(content);
+    }
+    
+    setPostContent(content);
     setHashtags(draft.hashtags);
     setSelectedHashtags(draft.hashtags);
     setCurrentLanguage(draft.language);
@@ -341,7 +361,8 @@ export default function Home() {
   };
 
   const getFinalPost = (): string => {
-    let final = postContent;
+    // Convert HTML to LinkedIn-compatible format
+    let final = convertHtmlToLinkedInFormat(postContent, useUnicodeFormatting);
     if (selectedHashtags.length > 0) {
       final += '\n\n' + selectedHashtags.map((h) => `#${h}`).join(' ');
     }
@@ -458,6 +479,27 @@ export default function Home() {
                     </svg>
                     Actions
                   </h3>
+                  
+                  {/* Unicode Formatting Toggle */}
+                  <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={useUnicodeFormatting}
+                        onChange={(e) => setUseUnicodeFormatting(e.target.checked)}
+                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                      />
+                      <div className="flex-1">
+                        <span className="text-sm font-medium text-gray-900">Use Unicode Formatting</span>
+                        <p className="text-xs text-gray-600 mt-0.5">
+                          {useUnicodeFormatting 
+                            ? 'Bold/italic will use Unicode characters. Note: Arabic/Kurdish bold may not render correctly in LinkedIn.'
+                            : 'Plain text only (better for accessibility and search)'}
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <button
                       type="button"
@@ -715,7 +757,7 @@ export default function Home() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
               </svg>
-              Preview (with hashtags):
+              Preview (LinkedIn-compatible format with hashtags):
             </p>
             <div 
               className="p-4 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl border border-gray-200 text-sm text-gray-700 whitespace-pre-wrap shadow-inner"
