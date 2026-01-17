@@ -6,6 +6,8 @@ const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 // Try gemini-3-pro-preview first, fallback to gemini-3-flash-preview if needed
 const DEFAULT_MODEL = "google/gemini-3-pro-preview";
 const FALLBACK_MODEL = "google/gemini-3-flash-preview";
+// Timeout for OpenRouter API calls (90 seconds - AI generation can take time)
+const OPENROUTER_TIMEOUT = 90000;
 
 // Character count targets based on post length (used in prompts, not as hard limits)
 const CHARACTER_TARGETS: Record<PostLength, number> = {
@@ -94,6 +96,33 @@ function cleanPostContent(content: string, language: Language): string {
   return cleaned;
 }
 
+/**
+ * Fetch with timeout support using AbortController (server-side)
+ */
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit,
+  timeout: number = OPENROUTER_TIMEOUT
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('Request to OpenRouter API timed out. The service took too long to respond. Please try again.');
+    }
+    throw error;
+  }
+}
+
 async function callOpenRouter(
   messages: OpenRouterMessage[],
   useFallback: boolean = false
@@ -108,7 +137,7 @@ async function callOpenRouter(
   console.log(`Using model: ${modelToUse}`);
 
   try {
-    const response = await fetch(OPENROUTER_API_URL, {
+    const response = await fetchWithTimeout(OPENROUTER_API_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -191,6 +220,18 @@ async function callOpenRouter(
     if (error instanceof Error) {
       // Log the actual error message for debugging
       console.error("OpenRouter API error details:", error.message);
+      
+      // Check if it's a timeout error
+      if (error.message.includes('timed out') || error.message.includes('timeout')) {
+        throw error; // Re-throw timeout errors as-is (already user-friendly)
+      }
+      
+      // Check if it's a network error
+      if (error.name === 'TypeError' && (error.message.includes('fetch') || error.message.includes('network'))) {
+        throw new Error('Connection error. Unable to reach the AI service. Please check your connection and try again.');
+      }
+      
+      // Re-throw API errors as-is
       throw error;
     }
     throw new Error("Failed to generate post");
