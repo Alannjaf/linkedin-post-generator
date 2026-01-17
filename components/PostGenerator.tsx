@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Language, Tone, PostLength, BuiltInTone } from '@/types';
 import { generatePost } from '@/lib/openrouter';
+import { useVoiceInput } from '@/lib/useVoiceInput';
 import CustomToneManager from './CustomToneManager';
 import ToneMixer from './ToneMixer';
 import IndustryPresets from './IndustryPresets';
@@ -40,6 +41,91 @@ export default function PostGenerator({ onPostGenerated, onError, initialContext
   const [toneTab, setToneTab] = useState<ToneTab>('built-in');
   const [showToneSelector, setShowToneSelector] = useState(false);
 
+  // Voice input integration
+  const {
+    transcript: voiceTranscript,
+    isListening,
+    error: voiceError,
+    isSupported: isVoiceSupported,
+    startListening,
+    stopListening,
+    clearTranscript: clearVoiceTranscript,
+  } = useVoiceInput(language);
+
+  // Track the last processed transcript to avoid duplicate appends
+  const lastProcessedTranscriptRef = useRef('');
+
+  // Update context when voice transcript changes
+  useEffect(() => {
+    if (!voiceTranscript) {
+      // Transcript was cleared (new session started)
+      lastProcessedTranscriptRef.current = '';
+      return;
+    }
+
+    if (voiceTranscript !== lastProcessedTranscriptRef.current) {
+      // Check if this is a continuation or a new session
+      const lastProcessed = lastProcessedTranscriptRef.current;
+      
+      if (voiceTranscript.startsWith(lastProcessed)) {
+        // Continuation: extract only the new part
+        const newText = voiceTranscript.slice(lastProcessed.length).trim();
+        if (newText) {
+          setContext((prev) => {
+            // Append only the new text
+            return prev.trim() === '' ? newText : `${prev} ${newText}`.trim();
+          });
+        }
+      } else {
+        // New session or transcript reset: use the full transcript
+        // This handles the case where transcript is cleared and restarted
+        const newText = voiceTranscript.trim();
+        if (newText) {
+          setContext((prev) => {
+            // If context is empty or was from previous voice session, replace it
+            // Otherwise append
+            return prev.trim() === '' ? newText : `${prev} ${newText}`.trim();
+          });
+        }
+      }
+      
+      lastProcessedTranscriptRef.current = voiceTranscript;
+    }
+  }, [voiceTranscript]);
+
+  // Show voice errors through the main error handler
+  useEffect(() => {
+    if (voiceError) {
+      onError(voiceError);
+    }
+  }, [voiceError, onError]);
+
+  // Keyboard shortcut: Ctrl+Shift+V to toggle voice input
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'V') {
+        e.preventDefault();
+        if (isListening) {
+          stopListening();
+        } else {
+          startListening();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isListening, startListening, stopListening]);
+
+  // Cleanup: stop listening when component unmounts
+  useEffect(() => {
+    return () => {
+      if (isListening) {
+        stopListening();
+      }
+    };
+  }, [isListening, stopListening]);
+
   const handleGenerate = async () => {
     if (!context.trim()) {
       onError('Please provide some context or draft idea');
@@ -63,19 +149,112 @@ export default function PostGenerator({ onPostGenerated, onError, initialContext
     }
   };
 
+  const handleVoiceToggle = () => {
+    if (isListening) {
+      stopListening();
+    } else {
+      startListening();
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
-        <label htmlFor="context" className="block text-sm font-semibold text-gray-900 mb-3">
-          Draft Idea / Context
-        </label>
-        <textarea
-          id="context"
-          value={context}
-          onChange={(e) => setContext(e.target.value)}
-          placeholder="Enter your draft idea, context, or key points for the LinkedIn post..."
-          className="w-full min-h-[140px] px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-y bg-white input-focus transition-all duration-200"
-        />
+        <div className="flex items-center justify-between mb-3">
+          <label htmlFor="context" className="block text-sm font-semibold text-gray-900">
+            Draft Idea / Context
+          </label>
+          {isVoiceSupported && (
+            <button
+              type="button"
+              onClick={handleVoiceToggle}
+              onMouseDown={(e) => e.preventDefault()} // Prevent textarea focus loss
+              disabled={isGenerating}
+              aria-label={isListening ? 'Stop voice input' : 'Start voice input'}
+              aria-pressed={isListening}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+                isListening
+                  ? 'bg-red-100 text-red-700 hover:bg-red-200 border border-red-300'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300'
+              } disabled:opacity-50 disabled:cursor-not-allowed`}
+            >
+              {isListening ? (
+                <>
+                  <svg
+                    className="w-4 h-4 animate-pulse"
+                    fill="currentColor"
+                    viewBox="0 0 20 20"
+                    aria-hidden="true"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                  <span className="hidden sm:inline">Listening...</span>
+                  <span className="sm:hidden">Stop</span>
+                </>
+              ) : (
+                <>
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
+                    />
+                  </svg>
+                  <span className="hidden sm:inline">Voice Input</span>
+                  <span className="sm:hidden">Voice</span>
+                </>
+              )}
+            </button>
+          )}
+        </div>
+        <div className="relative">
+          <textarea
+            id="context"
+            value={context}
+            onChange={(e) => setContext(e.target.value)}
+            placeholder="Enter your draft idea, context, or key points for the LinkedIn post..."
+            className="w-full min-h-[140px] px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-y bg-white input-focus transition-all duration-200"
+            aria-describedby={isListening ? 'voice-status' : undefined}
+          />
+          {isListening && (
+            <div
+              id="voice-status"
+              className="absolute bottom-2 left-4 flex items-center gap-2 text-xs text-red-600 bg-red-50 px-2 py-1 rounded border border-red-200"
+              role="status"
+              aria-live="polite"
+            >
+              <svg
+                className="w-3 h-3 animate-pulse"
+                fill="currentColor"
+                viewBox="0 0 20 20"
+                aria-hidden="true"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z"
+                  clipRule="evenodd"
+                />
+              </svg>
+              <span>Recording... Speak now</span>
+            </div>
+          )}
+        </div>
+        {isVoiceSupported && (
+          <p className="mt-2 text-xs text-gray-500">
+            Press <kbd className="px-1.5 py-0.5 bg-gray-100 border border-gray-300 rounded text-xs">Ctrl+Shift+V</kbd> to toggle voice input
+          </p>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

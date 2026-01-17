@@ -35,6 +35,7 @@ export default function PostEditor({
       }),
     ],
     content,
+    immediatelyRender: false, // Fix SSR hydration mismatch
     editorProps: {
       attributes: {
         class: 'prose prose-sm sm:prose-base lg:prose-lg xl:prose-xl mx-auto focus:outline-none min-h-[320px] px-4 py-3',
