@@ -1,5 +1,6 @@
 import { Language, Tone, PostLength, BuiltInTone } from "@/types";
 import { getToneDescription } from "./tone-mixer";
+import { promptCache } from "./prompt-cache";
 
 const LENGTH_TARGETS: Record<PostLength, number> = {
   short: 300,
@@ -41,11 +42,31 @@ export async function buildPostPrompt(params: {
   length: PostLength;
 }): Promise<string> {
   const { context, language, tone, length } = params;
+  
+  // Check cache first
+  const cachedPrompt = promptCache.get({
+    context,
+    language,
+    tone,
+    length,
+    type: 'post',
+  });
+  
+  if (cachedPrompt) {
+    return cachedPrompt;
+  }
+
+  // Clear expired entries periodically (every 100 cache checks)
+  if (Math.random() < 0.01) {
+    promptCache.clearExpired();
+  }
+
   const targetLength = LENGTH_TARGETS[length];
   const toneDesc = await getToneDescription(tone, language);
 
+  let prompt: string;
   if (language === "kurdish") {
-    return `تۆ بەرهەمهێنەری پۆستی LinkedIn بۆ کوردی. لەبەرگرتنەوەی دەقەکەم، پۆستێکی تەواوی LinkedIn دروست بکە.
+    prompt = `تۆ بەرهەمهێنەری پۆستی LinkedIn بۆ کوردی. لەبەرگرتنەوەی دەقەکەم، پۆستێکی تەواوی LinkedIn دروست بکە.
 
 زانیاری:
 ${context}
@@ -64,7 +85,7 @@ ${context}
 - بە هیچ شێوەیەک نیشانەی "*" (ئەستێرە) بەکار مەهێنە لە ناوەڕۆکی پۆستەکەدا.
 - بە راستەوخۆ پۆستەکە بنووسە، بەبێ هیچ پێشەکییەک.`;
   } else {
-    return `You are a LinkedIn post generator. Based on the following context, create a complete LinkedIn post.
+    prompt = `You are a LinkedIn post generator. Based on the following context, create a complete LinkedIn post.
 
 Context:
 ${context}
@@ -85,6 +106,17 @@ CRITICAL REQUIREMENTS:
 - DO NOT use asterisks "*" anywhere in the content. Use bullet points with dashes "-" or other formatting instead.
 - Start directly with the post content. No preamble or introduction.`;
   }
+
+  // Cache the generated prompt
+  promptCache.set({
+    context,
+    language,
+    tone,
+    length,
+    type: 'post',
+  }, prompt);
+
+  return prompt;
 }
 
 export function buildHashtagPrompt(params: {
@@ -93,6 +125,9 @@ export function buildHashtagPrompt(params: {
   trendingHashtags?: string[];
 }): string {
   const { postContent, language, trendingHashtags } = params;
+
+  // Note: Hashtag prompts are not cached because postContent is typically unique
+  // and caching would not provide significant performance benefits
 
   const trendingContext = trendingHashtags && trendingHashtags.length > 0
     ? (language === "kurdish"

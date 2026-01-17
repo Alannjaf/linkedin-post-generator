@@ -129,6 +129,12 @@ export default function Home() {
       return;
     }
 
+    // Optimistic update: show success immediately
+    const originalSuccess = success;
+    const originalError = error;
+    setSuccess('Draft saved!');
+    setError(null);
+
     try {
       // Get plain text title from HTML content
       const plainTextContent = htmlToPlainText(postContent);
@@ -145,10 +151,11 @@ export default function Home() {
         editedImagePrompt: editedImagePrompt || undefined,
         originalContext: originalContext || undefined,
       });
-      setSuccess('Draft saved!');
-      setError(null);
+      // Success message already shown optimistically
     } catch (err) {
-      setError('Failed to save draft');
+      // Rollback on failure
+      setSuccess(originalSuccess);
+      setError('Failed to save draft. Please try again.');
     }
   };
 
@@ -208,13 +215,31 @@ export default function Home() {
   };
 
   const handleSavePost = async (post: TrendingPost) => {
-    try {
-      await savePost(post);
+    // Optimistic update: add to saved posts immediately
+    const wasAlreadySaved = savedPostIds.has(post.id);
+    const originalSuccess = success;
+    const originalError = error;
+    
+    if (!wasAlreadySaved) {
       setSavedPostIds(prev => new Set([...prev, post.id]));
       setSuccess('Post saved! You can find it in Saved Posts.');
       setError(null);
+    }
+
+    try {
+      await savePost(post);
+      // Success already shown optimistically
     } catch (err) {
-      setError('Failed to save post');
+      // Rollback on failure
+      if (!wasAlreadySaved) {
+        setSavedPostIds(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(post.id);
+          return newSet;
+        });
+      }
+      setSuccess(originalSuccess);
+      setError('Failed to save post. Please try again.');
     }
   };
 

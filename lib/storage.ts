@@ -24,22 +24,52 @@ export async function saveDraft(draft: Omit<Draft, 'id' | 'createdAt' | 'updated
   }
 }
 
-export async function getAllDrafts(): Promise<Draft[]> {
+export async function getAllDrafts(page: number = 1, limit: number = 20): Promise<{
+  drafts: Draft[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    hasMore: boolean;
+  };
+}> {
   try {
-    const response = await fetch(API_BASE);
+    const response = await fetch(`${API_BASE}?page=${page}&limit=${limit}`);
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       throw new Error(errorData.error || 'Failed to load drafts');
     }
 
-    const drafts = await response.json();
-    return drafts.sort((a: Draft, b: Draft) => 
-      new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-    );
+    const data = await response.json();
+    
+    // Backward compatibility: if response is array (old API), convert to new format
+    if (Array.isArray(data)) {
+      return {
+        drafts: data.sort((a: Draft, b: Draft) => 
+          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+        ),
+        pagination: {
+          page: 1,
+          limit: data.length,
+          total: data.length,
+          hasMore: false,
+        },
+      };
+    }
+
+    return data;
   } catch (error) {
     console.error('Failed to load drafts:', error);
-    return [];
+    return {
+      drafts: [],
+      pagination: {
+        page,
+        limit,
+        total: 0,
+        hasMore: false,
+      },
+    };
   }
 }
 
