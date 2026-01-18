@@ -13,15 +13,33 @@ function parseCTAs(content: string, language: Language): GeneratedCTA[] {
   const ctas: GeneratedCTA[] = [];
   const placementOptions: Array<'start' | 'middle' | 'end' | 'embedded'> = ['end', 'middle', 'embedded', 'start', 'end'];
 
+  // Patterns to skip (introductory/meta text)
+  const skipPatternsEnglish = /^(here|sure|certainly|of course|based on|these are|i've|i have|let me|below|following|great|absolutely|happy to)/i;
+  const skipPatternsKurdish = /^(CTA|پێشنیار|نموونە|ئەمانە|لێرەدا)/i;
+  const numberedPrefix = /^\d+[\.\)\-:]\s*/;
+  const bulletPrefix = /^[\-\*•]\s*/;
+
   for (let i = 0; i < lines.length && ctas.length < 5; i++) {
-    const line = lines[i];
-    
+    let line = lines[i];
+
     // Skip meta-commentary
     if (language === 'kurdish') {
-      if (line.match(/^CTA|^پێشنیار|^نموونە/i)) continue;
+      if (skipPatternsKurdish.test(line)) continue;
     } else {
+      if (skipPatternsEnglish.test(line)) continue;
       if (line.match(/^CTA|^option|^suggestion|^example/i)) continue;
     }
+
+    // Skip very short lines (likely headers or labels)
+    if (line.length < 10) continue;
+
+    // Remove numbered prefixes (1., 2), 3-, etc.)
+    line = line.replace(numberedPrefix, '').trim();
+    // Remove bullet prefixes
+    line = line.replace(bulletPrefix, '').trim();
+
+    // Skip if too short after cleanup
+    if (line.length < 5) continue;
 
     // Parse format: "CTA_TEXT | placement" or just "CTA_TEXT"
     let ctaText = line;
@@ -31,7 +49,7 @@ function parseCTAs(content: string, language: Language): GeneratedCTA[] {
       const parts = line.split('|').map(p => p.trim());
       ctaText = parts[0];
       const placementStr = parts[1]?.toLowerCase();
-      
+
       if (placementStr === 'start' || placementStr === 'دەستپێک') {
         placement = 'start';
       } else if (placementStr === 'middle' || placementStr === 'ناوەڕاست') {
@@ -63,9 +81,9 @@ function parseCTAs(content: string, language: Language): GeneratedCTA[] {
     }
   }
 
-  return ctas.length > 0 ? ctas : [{ 
-    text: content.trim(), 
-    placement: { position: 'end', suggestion: 'End of post' } 
+  return ctas.length > 0 ? ctas : [{
+    text: content.trim(),
+    placement: { position: 'end', suggestion: 'End of post' }
   }];
 }
 

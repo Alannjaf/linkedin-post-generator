@@ -8,11 +8,11 @@ function getSql() {
   if (!process.env.DATABASE_URL) {
     throw new Error('DATABASE_URL environment variable is not set');
   }
-  
+
   if (!sqlInstance) {
     sqlInstance = neon(process.env.DATABASE_URL);
   }
-  
+
   return sqlInstance;
 }
 
@@ -83,9 +83,9 @@ export async function getCachedTrendingPosts(searchQuery: string): Promise<Trend
         AND expires_at > NOW()
       LIMIT 1
     `;
-    
+
     const cached = Array.isArray(result) && result.length > 0 ? (result[0] as TrendingPostsCacheRow) : null;
-    
+
     return cached;
   } catch (error) {
     logger.error('[DB Cache] Error getting cached trending posts:', error);
@@ -111,7 +111,7 @@ export async function saveTrendingPostsCache(
   try {
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + expirationHours);
-    
+
     await sql`
       INSERT INTO trending_posts_cache (
         search_query,
@@ -272,9 +272,9 @@ export async function ensureCustomTonesTable() {
         WHERE table_name = 'custom_tones'
       ) as exists
     `;
-    
+
     const exists = Array.isArray(tableExists) && tableExists.length > 0 && (tableExists[0] as { exists: boolean }).exists;
-    
+
     if (!exists) {
       await sql`
         CREATE TABLE custom_tones (
@@ -464,7 +464,7 @@ export async function updateCustomTone(
 ): Promise<CustomTone | null> {
   try {
     await ensureCustomTonesTable();
-    
+
     // Get current tone to merge with updates
     const current = await getCustomTone(id);
     if (!current) {
@@ -500,7 +500,7 @@ export async function updateCustomTone(
         created_at as "createdAt",
         updated_at as "updatedAt"
     `;
-    
+
     return Array.isArray(result) && result.length > 0 ? (result[0] as CustomTone) : null;
   } catch (error) {
     logger.error('Error updating custom tone:', error);
@@ -629,3 +629,249 @@ export async function seedIndustryPresets() {
   }
 }
 
+// ========================================
+// ADAPTED POSTS (Cross-Platform)
+// ========================================
+
+export interface AdaptedPostRow {
+  id: string;
+  source_content: string;
+  platform: string;
+  adapted_content: string;
+  character_count: number;
+  changes: string[];
+  language: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function ensureAdaptedPostsTable() {
+  try {
+    await sql`
+      CREATE TABLE IF NOT EXISTS adapted_posts (
+        id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+        source_content TEXT NOT NULL,
+        platform VARCHAR(50) NOT NULL,
+        adapted_content TEXT NOT NULL,
+        character_count INTEGER NOT NULL,
+        changes JSONB DEFAULT '[]'::jsonb,
+        language VARCHAR(20) NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `;
+  } catch (error) {
+    logger.error('Error ensuring adapted_posts table:', error);
+  }
+}
+
+export async function saveAdaptedPost(data: {
+  sourceContent: string;
+  platform: string;
+  adaptedContent: string;
+  characterCount: number;
+  changes: string[];
+  language: string;
+}): Promise<AdaptedPostRow | null> {
+  try {
+    await ensureAdaptedPostsTable();
+    const result = await sql`
+      INSERT INTO adapted_posts (
+        source_content,
+        platform,
+        adapted_content,
+        character_count,
+        changes,
+        language
+      ) VALUES (
+        ${data.sourceContent},
+        ${data.platform},
+        ${data.adaptedContent},
+        ${data.characterCount},
+        ${JSON.stringify(data.changes)}::jsonb,
+        ${data.language}
+      )
+      RETURNING *
+    `;
+    return Array.isArray(result) && result.length > 0 ? (result[0] as AdaptedPostRow) : null;
+  } catch (error) {
+    logger.error('Error saving adapted post:', error);
+    throw error;
+  }
+}
+
+export async function getAllAdaptedPosts(): Promise<AdaptedPostRow[]> {
+  try {
+    await ensureAdaptedPostsTable();
+    const result = await sql`
+      SELECT * FROM adapted_posts
+      ORDER BY created_at DESC
+    `;
+    return Array.isArray(result) ? (result as AdaptedPostRow[]) : [];
+  } catch (error) {
+    logger.error('Error getting adapted posts:', error);
+    return [];
+  }
+}
+
+export async function deleteAdaptedPost(id: string): Promise<void> {
+  try {
+    await sql`DELETE FROM adapted_posts WHERE id = ${id}`;
+  } catch (error) {
+    logger.error('Error deleting adapted post:', error);
+    throw error;
+  }
+}
+
+// ========================================
+// CAROUSELS
+// ========================================
+
+export interface CarouselRow {
+  id: string;
+  title: string;
+  source_content: string;
+  slides: Array<{
+    slideNumber: number;
+    title: string;
+    content: string;
+    imageSuggestion?: string;
+    imageUrl?: string;
+    characterCount: number;
+  }>;
+  total_slides: number;
+  introduction?: string;
+  conclusion?: string;
+  hashtags: string[];
+  image_theme?: string;
+  branding_guidelines?: string;
+  language: string;
+  tone: string;
+  slide_images: Record<number, string>;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function ensureCarouselsTable() {
+  try {
+    await sql`
+      CREATE TABLE IF NOT EXISTS carousels (
+        id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+        title TEXT NOT NULL,
+        source_content TEXT NOT NULL,
+        slides JSONB NOT NULL,
+        total_slides INTEGER NOT NULL,
+        introduction TEXT,
+        conclusion TEXT,
+        hashtags JSONB DEFAULT '[]'::jsonb,
+        image_theme TEXT,
+        branding_guidelines TEXT,
+        language VARCHAR(20) NOT NULL,
+        tone VARCHAR(50) NOT NULL,
+        slide_images JSONB DEFAULT '{}'::jsonb,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `;
+  } catch (error) {
+    logger.error('Error ensuring carousels table:', error);
+  }
+}
+
+export async function saveCarousel(data: {
+  title: string;
+  sourceContent: string;
+  slides: CarouselRow['slides'];
+  totalSlides: number;
+  introduction?: string;
+  conclusion?: string;
+  hashtags: string[];
+  imageTheme?: string;
+  brandingGuidelines?: string;
+  language: string;
+  tone: string;
+  slideImages?: Record<number, string>;
+}): Promise<CarouselRow | null> {
+  try {
+    await ensureCarouselsTable();
+    const result = await sql`
+      INSERT INTO carousels (
+        title,
+        source_content,
+        slides,
+        total_slides,
+        introduction,
+        conclusion,
+        hashtags,
+        image_theme,
+        branding_guidelines,
+        language,
+        tone,
+        slide_images
+      ) VALUES (
+        ${data.title},
+        ${data.sourceContent},
+        ${JSON.stringify(data.slides)}::jsonb,
+        ${data.totalSlides},
+        ${data.introduction || null},
+        ${data.conclusion || null},
+        ${JSON.stringify(data.hashtags)}::jsonb,
+        ${data.imageTheme || null},
+        ${data.brandingGuidelines || null},
+        ${data.language},
+        ${data.tone},
+        ${JSON.stringify(data.slideImages || {})}::jsonb
+      )
+      RETURNING *
+    `;
+    return Array.isArray(result) && result.length > 0 ? (result[0] as CarouselRow) : null;
+  } catch (error) {
+    logger.error('Error saving carousel:', error);
+    throw error;
+  }
+}
+
+export async function getAllCarousels(): Promise<CarouselRow[]> {
+  try {
+    await ensureCarouselsTable();
+    const result = await sql`
+      SELECT * FROM carousels
+      ORDER BY created_at DESC
+    `;
+    return Array.isArray(result) ? (result as CarouselRow[]) : [];
+  } catch (error) {
+    logger.error('Error getting carousels:', error);
+    return [];
+  }
+}
+
+export async function updateCarouselSlideImage(
+  carouselId: string,
+  slideNumber: number,
+  imageUrl: string
+): Promise<void> {
+  try {
+    await sql`
+      UPDATE carousels 
+      SET slide_images = jsonb_set(
+        COALESCE(slide_images, '{}'::jsonb),
+        ${'{' + slideNumber + '}'}::text[],
+        ${JSON.stringify(imageUrl)}::jsonb
+      ),
+      updated_at = NOW()
+      WHERE id = ${carouselId}
+    `;
+  } catch (error) {
+    logger.error('Error updating carousel slide image:', error);
+    throw error;
+  }
+}
+
+export async function deleteCarousel(id: string): Promise<void> {
+  try {
+    await sql`DELETE FROM carousels WHERE id = ${id}`;
+  } catch (error) {
+    logger.error('Error deleting carousel:', error);
+    throw error;
+  }
+}

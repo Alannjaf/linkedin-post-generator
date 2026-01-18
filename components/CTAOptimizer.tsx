@@ -71,9 +71,9 @@ export default function CTAOptimizer({
   const handleInsertCTA = (cta: GeneratedCTA) => {
     const plainTextContent = htmlToPlainText(postContent);
     const lines = plainTextContent.split('\n').filter(line => line.trim());
-    
+
     let newContent = '';
-    
+
     switch (cta.placement.position) {
       case 'start':
         newContent = `${cta.text}\n\n${plainTextContent}`;
@@ -97,7 +97,7 @@ export default function CTAOptimizer({
         newContent = `${plainTextContent}\n\n${cta.text}`;
         break;
     }
-    
+
     const htmlContent = plainTextToHtml(newContent);
     onCTASelected(htmlContent, cta.placement.position);
   };
@@ -107,20 +107,20 @@ export default function CTAOptimizer({
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-md border border-gray-200/50 card-hover overflow-hidden">
+    <div className="glass-card overflow-hidden">
       <button
         type="button"
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full p-6 sm:p-8 flex items-center justify-between hover:bg-gray-50 transition-colors duration-200"
+        className="w-full p-6 sm:p-8 flex items-center justify-between hover:bg-[var(--bg-card-hover)] transition-colors duration-200"
       >
-        <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-          <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <h3 className="text-lg font-semibold text-[var(--text-primary)] flex items-center gap-2">
+          <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
           </svg>
           {language === 'kurdish' ? 'باشکردنی CTA' : 'CTA Optimizer'}
         </h3>
         <svg
-          className={`w-5 h-5 text-gray-500 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}
+          className={`w-5 h-5 text-[var(--text-muted)] transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -130,13 +130,12 @@ export default function CTAOptimizer({
       </button>
 
       <div
-        className={`overflow-hidden transition-all duration-300 ease-in-out ${
-          isExpanded ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
-        }`}
+        className={`overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
+          }`}
       >
-        <div className="px-6 sm:px-8 pb-6 sm:pb-8 border-t border-gray-200">
+        <div className="px-6 sm:px-8 pb-6 sm:pb-8 border-t border-[var(--border-default)]">
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border-l-4 border-red-500 rounded text-red-800 text-sm">
+            <div className="mb-4 p-3 bg-red-500/10 border-l-4 border-red-500 rounded text-red-400 text-sm">
               {error}
             </div>
           )}
@@ -145,7 +144,7 @@ export default function CTAOptimizer({
             type="button"
             onClick={handleGenerateCTAs}
             disabled={isGenerating || !postContent.trim()}
-            className="w-full mb-4 bg-green-600 text-white px-4 py-2.5 rounded-lg font-semibold hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2"
+            className="w-full mb-4 bg-gradient-to-r from-green-500 to-emerald-500 text-white px-4 py-2.5 rounded-lg font-semibold hover:from-green-600 hover:to-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2"
           >
             {isGenerating ? (
               <>
@@ -167,29 +166,29 @@ export default function CTAOptimizer({
 
           {ctas.length > 0 && (
             <div className="space-y-3">
-              <h4 className="text-sm font-semibold text-gray-900">
+              <h4 className="text-sm font-semibold text-[var(--text-primary)]">
                 {language === 'kurdish' ? 'CTA-ی دروستکراو:' : 'Generated CTAs:'}
               </h4>
               {ctas.map((cta, index) => (
                 <div
                   key={index}
-                  className="p-4 bg-gray-50 rounded-lg border border-gray-200 hover:border-green-300 transition-colors"
+                  className="p-4 glass-card hover:border-green-500/50 transition-colors"
                 >
                   <div className="flex items-start justify-between gap-3 mb-2">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded">
+                        <span className="text-xs font-medium text-green-400 bg-green-500/20 px-2 py-0.5 rounded">
                           {getPlacementLabel(cta.placement.position)}
                         </span>
                         {cta.effectivenessScore && (
-                          <span className="text-xs text-gray-500">
+                          <span className="text-xs text-[var(--text-muted)]">
                             {Math.round(cta.effectivenessScore)}% {language === 'kurdish' ? 'کاریگەری' : 'effective'}
                           </span>
                         )}
                       </div>
-                      <p className="text-sm text-gray-800 whitespace-pre-wrap">{cta.text}</p>
+                      <p className="text-sm text-[var(--text-secondary)] whitespace-pre-wrap">{cta.text}</p>
                       {cta.placement.suggestion && (
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="text-xs text-[var(--text-muted)] mt-1">
                           {language === 'kurdish' ? 'پێشنیار:' : 'Suggestion:'} {cta.placement.suggestion}
                         </p>
                       )}
@@ -198,7 +197,7 @@ export default function CTAOptimizer({
                   <button
                     type="button"
                     onClick={() => handleInsertCTA(cta)}
-                    className="mt-2 w-full px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
+                    className="mt-2 w-full btn-secondary py-1.5 text-sm justify-center"
                   >
                     {language === 'kurdish' ? 'دانانی CTA' : 'Insert CTA'}
                   </button>

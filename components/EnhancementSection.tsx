@@ -15,6 +15,7 @@ interface EnhancementSectionProps {
   imageGeneration: UseImageGenerationReturn;
   onPostContentChange: (content: string) => void;
   onToast: (message: string, type: 'success' | 'error' | 'info') => void;
+  initialCarousel?: import('@/types').GeneratedCarousel | null;
 }
 
 export default function EnhancementSection({
@@ -24,8 +25,9 @@ export default function EnhancementSection({
   imageGeneration,
   onPostContentChange,
   onToast,
+  initialCarousel,
 }: EnhancementSectionProps) {
-  const [enhancementTab, setEnhancementTab] = useState<'content' | 'formatting' | 'media'>('content');
+  const [enhancementTab, setEnhancementTab] = useState<'content' | 'formatting' | 'media'>(initialCarousel ? 'formatting' : 'content');
 
   const tabs = [
     { id: 'content' as const, label: 'Content', icon: '📝' },
@@ -106,6 +108,7 @@ export default function EnhancementSection({
                   onPostContentChange(newContent);
                   onToast('Carousel applied to post!', 'success');
                 }}
+                initialCarousel={initialCarousel}
               />
             </div>
           )}

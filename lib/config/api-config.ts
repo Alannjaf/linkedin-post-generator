@@ -9,8 +9,8 @@ export const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions
 export const DEFAULT_MODEL = "google/gemini-3-pro-preview";
 export const FALLBACK_MODEL = "google/gemini-3-flash-preview";
 
-// Timeout for OpenRouter API calls (90 seconds - AI generation can take time)
-export const OPENROUTER_TIMEOUT = 90000;
+// Timeout for OpenRouter API calls (120 seconds - AI generation can take time for long content)
+export const OPENROUTER_TIMEOUT = 120000;
 
 // Default temperature for OpenRouter API calls
 export const DEFAULT_TEMPERATURE = 0.7;

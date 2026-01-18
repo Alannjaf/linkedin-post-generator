@@ -43,7 +43,7 @@ export async function buildPostPrompt(params: {
   length: PostLength;
 }): Promise<string> {
   const { context, language, tone, length } = params;
-  
+
   // Check cache first
   const cachedPrompt = promptCache.get({
     context,
@@ -52,7 +52,7 @@ export async function buildPostPrompt(params: {
     length,
     type: 'post',
   });
-  
+
   if (cachedPrompt) {
     return cachedPrompt;
   }
@@ -132,8 +132,8 @@ export function buildHashtagPrompt(params: {
 
   const trendingContext = trendingHashtags && trendingHashtags.length > 0
     ? (language === "kurdish"
-        ? `\n\nهاشتاگە بەناوبانگەکان لە پۆستە هاوشێوەکاندا: ${trendingHashtags.map(t => `#${t}`).join(', ')}\nئەم هاشتاگانە لە پۆستە بەناوبانگەکاندا بەکاردەهێنران. لەبەرگرتنەوەیان بکە بۆ پێشنیارەکانت.`
-        : `\n\nTrending hashtags from similar popular posts: ${trendingHashtags.map(t => `#${t}`).join(', ')}\nThese hashtags were used in popular posts on similar topics. Consider them for your suggestions.`)
+      ? `\n\nهاشتاگە بەناوبانگەکان لە پۆستە هاوشێوەکاندا: ${trendingHashtags.map(t => `#${t}`).join(', ')}\nئەم هاشتاگانە لە پۆستە بەناوبانگەکاندا بەکاردەهێنران. لەبەرگرتنەوەیان بکە بۆ پێشنیارەکانت.`
+      : `\n\nTrending hashtags from similar popular posts: ${trendingHashtags.map(t => `#${t}`).join(', ')}\nThese hashtags were used in popular posts on similar topics. Consider them for your suggestions.`)
     : '';
 
   if (language === "kurdish") {
@@ -157,17 +157,17 @@ export function buildHookPrompt(params: {
 }): string {
   const { postContent, language, tone, hookStyle = 'any' } = params;
 
-  const toneDesc = language === 'kurdish' 
+  const toneDesc = language === 'kurdish'
     ? 'شێوازی پۆستەکە'
     : 'the post tone';
 
   const styleInstructions = hookStyle === 'any'
     ? (language === 'kurdish'
-        ? 'جۆرە جیاوازەکانی هۆک: پرسیار، دەربڕین، چیرۆک، ئامار'
-        : 'different hook styles: question, statement, story, statistic')
+      ? 'جۆرە جیاوازەکانی هۆک: پرسیار، دەربڕین، چیرۆک، ئامار'
+      : 'different hook styles: question, statement, story, statistic')
     : (language === 'kurdish'
-        ? `جۆری هۆک: ${hookStyle === 'question' ? 'پرسیار' : hookStyle === 'statement' ? 'دەربڕین' : hookStyle === 'story' ? 'چیرۆک' : 'ئامار'}`
-        : `hook style: ${hookStyle}`);
+      ? `جۆری هۆک: ${hookStyle === 'question' ? 'پرسیار' : hookStyle === 'statement' ? 'دەربڕین' : hookStyle === 'story' ? 'چیرۆک' : 'ئامار'}`
+      : `hook style: ${hookStyle}`);
 
   if (language === "kurdish") {
     return `بەپێی پۆستی خوارەوە، 3-5 هۆکی جیاواز (دەستپێکردنی سەرنجڕاکێش) دروست بکە. هۆکەکان دەبێت:
@@ -205,8 +205,8 @@ export async function buildCTAPrompt(params: {
 
   const postTypeContext = postType
     ? (language === 'kurdish'
-        ? `جۆری پۆست: ${postType === 'engagement' ? 'بەشداری' : postType === 'showcase' ? 'پیشاندان' : postType === 'educational' ? 'پەروەردەیی' : postType === 'story' ? 'چیرۆک' : postType === 'building' ? 'دروستکردن' : 'ئاگاداری'}`
-        : `Post type: ${postType}`)
+      ? `جۆری پۆست: ${postType === 'engagement' ? 'بەشداری' : postType === 'showcase' ? 'پیشاندان' : postType === 'educational' ? 'پەروەردەیی' : postType === 'story' ? 'چیرۆک' : postType === 'building' ? 'دروستکردن' : 'ئاگاداری'}`
+      : `Post type: ${postType}`)
     : '';
 
   if (language === "kurdish") {
@@ -291,67 +291,76 @@ export async function buildCarouselPrompt(params: {
 
   const slideCountInstruction = targetSlideCount
     ? (language === 'kurdish'
-        ? `- ژمارەی سلاید: ${targetSlideCount} سلاید`
-        : `- Number of slides: ${targetSlideCount} slides`)
+      ? `- ژمارەی سلاید: ${targetSlideCount} سلاید`
+      : `- Number of slides: ${targetSlideCount} slides`)
     : (language === 'kurdish'
-        ? `- ژمارەی سلاید: بەپێی درێژی ناوەڕۆک (3-10 سلاید)`
-        : `- Number of slides: Based on content length (3-10 slides)`);
+      ? `- ژمارەی سلاید: بەپێی درێژی ناوەڕۆک (3-10 سلاید)`
+      : `- Number of slides: Based on content length (3-10 slides)`);
 
   if (language === "kurdish") {
     return `بەپێی پۆستی LinkedIn خوارەوە، پۆستەکە بگۆڕە بۆ فۆرماتی carousel (سلایدی هەمەجۆر). 
-
-پۆستی سەرەکی:
-${postContent}
-
-تێبینیەکان:
-- شێواز: ${toneDesc}
-- ${slideCountInstruction}
-- درێژی هەر سلایدێک: نزیکەی 125 پیت (ناوەڕۆک + سەردێڕ)
-- سەردێڕی سلاید: 30-50 پیت
-- ناوەڕۆکی سلاید: 80-120 پیت
-
-پێویستیەکی زۆر گرنگ بۆ وێنەکان:
-- هەموو وێنەکان دەبێت هەمان تێم و براندینگ هەبێت
-- هەمان شێوازی بینراو (وەک minimalist, corporate, modern)
-- هەمان پاڵێتی ڕەنگ (ڕەنگەکان دیاری بکە)
-- هەمان زمانێکی دیزاین (شێوازی وێنەکێشان، فۆتۆگرافی)
-- تێمی سەرەکی دروست بکە کە بۆ هەموو سلایدەکان بەکاربهێنرێت
-
-فۆرمات:
-بۆ هەر سلاید، بنووسە:
-SLIDE [number]:
-TITLE: [سەردێڕ]
-CONTENT: [ناوەڕۆک]
-IMAGE: [پێشنیاری وێنە - دڵنیابە کە لەگەڵ تێمی سەرەکی بگونجێت]
-
-لە کۆتاییدا، تێمی سەرەکی وێنەکان بنووسە کە بۆ هەموو سلایدەکان بەکاربهێنرێت.`;
+    
+    زانیاری پۆست:
+    ${postContent}
+    
+    تێبینیەکان:
+    - شێواز: ${toneDesc}
+    - ${slideCountInstruction}
+    - درێژی هەر سلایدێک: نزیکەی 125 پیت (ناوەڕۆک + سەردێڕ)
+    - سەردێڕی سلاید: 30-50 پیت
+    - ناوەڕۆکی سلاید: 80-120 پیت
+    
+    پێویستیەکی زۆر گرنگ بۆ وێنەکان:
+    - هەموو وێنەکان دەبێت هەمان تێم و براندینگ هەبێت
+    - هەمان شێوازی بینراو (وەک minimalist, corporate, modern)
+    - هەمان پاڵێتی ڕەنگ (ڕەنگەکان دیاری بکە)
+    - هەمان زمانێکی دیزاین (شێوازی وێنەکێشان، فۆتۆگرافی)
+    - تێمی سەرەکی دروست بکە کە بۆ هەموو سلایدەکان بەکاربهێنرێت
+    
+    فۆرمات (بە وردی پەیڕەوی بکە):
+    - بۆ هەر سلاید، تەنها ئەم شێوازە بەکاربهێنە. هیچ نیشانەیەکی تر (#, *, -) بەکارمەهێنە بۆ ناونیشانەکان.
+    - بە هیچ شێوەیەک پێشەکی (Introduction) وەک "فەرموو"، "ئەمەش پلانەکە" مەنووسە. ڕاستەوخۆ دەست پێ بکە.
+    
+    SLIDE [number]:
+    TITLE: [سەردێڕ]
+    CONTENT: [ناوەڕۆک]
+    IMAGE: [پێشنیاری وێنە - دڵنیابە کە لەگەڵ تێمی سەرەکی بگونجێت]
+    
+    لە کۆتاییدا، تێمی سەرەکی وێنەکان بنووسە:
+    MASTER IMAGE THEME: [تێمی سەرەکی]`;
   } else {
     return `Based on the following LinkedIn post, convert it into a carousel format (multi-slide document).
-
-Original Post:
-${postContent}
-
-Requirements:
-- Tone: ${toneDesc}
-- ${slideCountInstruction}
-- Each slide length: Approximately 125 characters (content + title)
-- Slide title: 30-50 characters
-- Slide content: 80-120 characters
-
-CRITICAL REQUIREMENT FOR IMAGES:
-- ALL images must share the SAME theme and branding
-- Same visual style (e.g., minimalist, corporate, modern)
-- Same color palette (specify consistent colors)
-- Same design language (illustration style, photography style)
-- Generate a master theme that applies to ALL slides
-
-Format:
-For each slide, write:
-SLIDE [number]:
-TITLE: [title]
-CONTENT: [content]
-IMAGE: [image suggestion - ensure it matches the master theme]
-
-At the end, write the master image theme that applies to all slides.`;
+    
+    Original Post:
+    ${postContent}
+    
+    Requirements:
+    - Tone: ${toneDesc}
+    - ${slideCountInstruction}
+    - Each slide length: Approximately 125 characters (content + title)
+    - Slide title: 30-50 characters
+    - Slide content: 80-120 characters
+    
+    CRITICAL REQUIREMENT FOR IMAGES:
+    - ALL images must share the SAME theme and branding
+    - Same visual style (e.g., minimalist, corporate, modern)
+    - Same color palette (specify consistent colors)
+    - Same design language (illustration style, photography style)
+    - Generate a master theme that applies to ALL slides
+    
+    CRITICAL FORMATTING RULES:
+    - START DIRECTLY with SLIDE 1.
+    - DO NOT include any introductory text, meta-commentary, or phrases like "Here is the carousel" or "Sure, I can help".
+    - DO NOT use Markdown headers (### or **) for the field labels (SLIDE, TITLE, CONTENT, IMAGE).
+    
+    Format:
+    For each slide, write exactly:
+    SLIDE [number]:
+    TITLE: [title]
+    CONTENT: [content]
+    IMAGE: [image suggestion - ensure it matches the master theme]
+    
+    At the end, write:
+    MASTER IMAGE THEME: [description of the consistent visual theme]`;
   }
 }

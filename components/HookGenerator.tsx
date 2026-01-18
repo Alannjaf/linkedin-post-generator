@@ -74,14 +74,14 @@ export default function HookGenerator({
   const handleUseHook = (hook: string) => {
     const plainTextContent = htmlToPlainText(postContent);
     const lines = plainTextContent.split('\n').filter(line => line.trim());
-    
+
     // Replace first line with hook, or prepend if no content
     if (lines.length > 0) {
       lines[0] = hook;
     } else {
       lines.unshift(hook);
     }
-    
+
     const newContent = lines.join('\n');
     const htmlContent = plainTextToHtml(newContent);
     onHookSelected(htmlContent);
@@ -92,20 +92,20 @@ export default function HookGenerator({
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-md border border-gray-200/50 card-hover overflow-hidden">
+    <div className="glass-card overflow-hidden">
       <button
         type="button"
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full p-6 sm:p-8 flex items-center justify-between hover:bg-gray-50 transition-colors duration-200"
+        className="w-full p-6 sm:p-8 flex items-center justify-between hover:bg-[var(--bg-card-hover)] transition-colors duration-200"
       >
-        <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-          <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <h3 className="text-lg font-semibold text-[var(--text-primary)] flex items-center gap-2">
+          <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
           </svg>
           {language === 'kurdish' ? 'بەرهەمهێنانی هۆک' : 'Hook Generator'}
         </h3>
         <svg
-          className={`w-5 h-5 text-gray-500 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}
+          className={`w-5 h-5 text-[var(--text-muted)] transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -115,26 +115,25 @@ export default function HookGenerator({
       </button>
 
       <div
-        className={`overflow-hidden transition-all duration-300 ease-in-out ${
-          isExpanded ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
-        }`}
+        className={`overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
+          }`}
       >
-        <div className="px-6 sm:px-8 pb-6 sm:pb-8 border-t border-gray-200">
+        <div className="px-6 sm:px-8 pb-6 sm:pb-8 border-t border-[var(--border-default)]">
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border-l-4 border-red-500 rounded text-red-800 text-sm">
+            <div className="mb-4 p-3 bg-red-500/10 border-l-4 border-red-500 rounded text-red-400 text-sm">
               {error}
             </div>
           )}
 
           <div className="mb-4">
-            <label className="block text-sm font-semibold text-gray-900 mb-2">
+            <label className="block text-sm font-semibold text-[var(--text-primary)] mb-2">
               {language === 'kurdish' ? 'جۆری هۆک' : 'Hook Style'}
             </label>
             <select
               value={selectedHookStyle}
               onChange={(e) => setSelectedHookStyle(e.target.value as HookStyle)}
               disabled={isGenerating}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white disabled:opacity-50 disabled:cursor-not-allowed"
+              className="select-field"
             >
               {(['any', 'question', 'statement', 'story', 'statistic'] as HookStyle[]).map((style) => (
                 <option key={style} value={style}>
@@ -148,7 +147,7 @@ export default function HookGenerator({
             type="button"
             onClick={handleGenerateHooks}
             disabled={isGenerating || !postContent.trim()}
-            className="w-full mb-4 bg-blue-600 text-white px-4 py-2.5 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2"
+            className="w-full mb-4 btn-primary py-2.5 justify-center"
           >
             {isGenerating ? (
               <>
@@ -170,28 +169,28 @@ export default function HookGenerator({
 
           {hooks.length > 0 && (
             <div className="space-y-3">
-              <h4 className="text-sm font-semibold text-gray-900">
+              <h4 className="text-sm font-semibold text-[var(--text-primary)]">
                 {language === 'kurdish' ? 'هۆکە دروستکراوەکان:' : 'Generated Hooks:'}
               </h4>
               {hooks.map((hook, index) => (
                 <div
                   key={index}
-                  className="p-4 bg-gray-50 rounded-lg border border-gray-200 hover:border-blue-300 transition-colors"
+                  className="p-4 glass-card hover:border-blue-500/50 transition-colors"
                 >
                   <div className="flex items-start justify-between gap-3 mb-2">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
+                        <span className="text-xs font-medium text-blue-400 bg-blue-500/20 px-2 py-0.5 rounded">
                           {getStyleLabel(hook.style)}
                         </span>
                       </div>
-                      <p className="text-sm text-gray-800 whitespace-pre-wrap">{hook.text}</p>
+                      <p className="text-sm text-[var(--text-secondary)] whitespace-pre-wrap">{hook.text}</p>
                     </div>
                   </div>
                   <button
                     type="button"
                     onClick={() => handleUseHook(hook.text)}
-                    className="mt-2 w-full px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                    className="mt-2 w-full btn-secondary py-1.5 text-sm justify-center"
                   >
                     {language === 'kurdish' ? 'بەکارهێنانی ئەم هۆکە' : 'Use This Hook'}
                   </button>

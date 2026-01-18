@@ -12,14 +12,16 @@ export interface UseDraftsAndSavedReturn {
   savedPostsCount: number;
   isDraftManagerOpen: boolean;
   isSavedPostsOpen: boolean;
-  
+  isSavedContentOpen: boolean;
+
   // Setters
   setSavedPostIds: React.Dispatch<React.SetStateAction<Set<string>>>;
   setDraftsCount: (count: number) => void;
   setSavedPostsCount: (count: number) => void;
   setIsDraftManagerOpen: (open: boolean) => void;
   setIsSavedPostsOpen: (open: boolean) => void;
-  
+  setIsSavedContentOpen: (open: boolean) => void;
+
   // Actions
   refreshSavedPostIds: () => Promise<void>;
   refreshDraftsCount: () => Promise<void>;
@@ -35,6 +37,7 @@ export function useDraftsAndSaved(): UseDraftsAndSavedReturn {
   const [savedPostsCount, setSavedPostsCount] = useState(0);
   const [isDraftManagerOpen, setIsDraftManagerOpen] = useState(false);
   const [isSavedPostsOpen, setIsSavedPostsOpen] = useState(false);
+  const [isSavedContentOpen, setIsSavedContentOpen] = useState(false);
 
   // Load saved post IDs and counts on mount
   useEffect(() => {
@@ -105,7 +108,7 @@ export function useDraftsAndSaved(): UseDraftsAndSavedReturn {
   ) => {
     // Optimistic update: add to saved posts immediately
     const wasAlreadySaved = savedPostIds.has(post.id);
-    
+
     if (!wasAlreadySaved) {
       setSavedPostIds(prev => new Set([...prev, post.id]));
     }
@@ -154,14 +157,16 @@ export function useDraftsAndSaved(): UseDraftsAndSavedReturn {
     savedPostsCount,
     isDraftManagerOpen,
     isSavedPostsOpen,
-    
+    isSavedContentOpen,
+
     // Setters
     setSavedPostIds,
     setDraftsCount,
     setSavedPostsCount,
     setIsDraftManagerOpen,
     setIsSavedPostsOpen,
-    
+    setIsSavedContentOpen,
+
     // Actions
     refreshSavedPostIds,
     refreshDraftsCount,

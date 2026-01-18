@@ -4,7 +4,7 @@ import PostGenerator from '@/components/PostGenerator';
 import PostEditor from '@/components/PostEditor';
 import HashtagSuggestions from '@/components/HashtagSuggestions';
 import { Language, Tone, PostLength } from '@/types';
-import { saveDraft, getAllDrafts } from '@/lib/storage';
+import { saveDraft, updateDraft, getAllDrafts } from '@/lib/storage';
 import { htmlToPlainText, plainTextToHtml } from '@/lib/linkedin-formatter';
 import { Draft } from '@/types';
 
@@ -29,6 +29,8 @@ interface PostContentSectionProps {
   imagePrompt?: string;
   editedImagePrompt?: string;
   originalContext: string;
+  currentDraftId: string | null;
+  onDraftIdUpdate: (id: string | null) => void;
 }
 
 export default function PostContentSection({
@@ -52,6 +54,8 @@ export default function PostContentSection({
   imagePrompt,
   editedImagePrompt,
   originalContext,
+  currentDraftId,
+  onDraftIdUpdate,
 }: PostContentSectionProps) {
   const handleSaveDraft = async () => {
     if (!postContent.trim()) {
@@ -62,19 +66,35 @@ export default function PostContentSection({
     try {
       const plainTextContent = htmlToPlainText(postContent);
       const title = plainTextContent.substring(0, 50) || 'Untitled Draft';
-      await saveDraft({
+
+      const draftData = {
         title,
         content: postContent,
         language: currentLanguage,
         tone: currentTone,
         length: currentLength,
-        hashtags: selectedHashtags,
+        hashtags: [...new Set([...selectedHashtags, ...hashtags])], // Save both selected and suggested hashtags
         generatedImage: generatedImage || null,
         imagePrompt: imagePrompt || undefined,
         editedImagePrompt: editedImagePrompt || undefined,
         originalContext: originalContext || undefined,
-      });
-      onToast('Draft saved!', 'success');
+      };
+
+      let savedDraft: Draft | null = null;
+
+      if (currentDraftId) {
+        // Update existing draft
+        savedDraft = await updateDraft(currentDraftId, draftData);
+        onToast('Draft updated!', 'success');
+      } else {
+        // Create new draft
+        savedDraft = await saveDraft(draftData);
+        if (savedDraft) {
+          onDraftIdUpdate(savedDraft.id); // Track the new draft ID
+        }
+        onToast('Draft saved!', 'success');
+      }
+
       const result = await getAllDrafts(1, 1);
       onDraftsCountUpdate(result.pagination.total);
     } catch (err) {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Language, Tone, GeneratedCarousel, CarouselSlide } from '@/types';
 import { htmlToPlainText, plainTextToHtml } from '@/lib/linkedin-formatter';
 
@@ -9,6 +9,7 @@ interface CarouselGeneratorProps {
   language: Language;
   tone: Tone;
   onCarouselSelected: (carouselContent: string) => void;
+  initialCarousel?: GeneratedCarousel | null;
 }
 
 export default function CarouselGenerator({
@@ -16,12 +17,28 @@ export default function CarouselGenerator({
   language,
   tone,
   onCarouselSelected,
+  initialCarousel,
 }: CarouselGeneratorProps) {
   const [carousel, setCarousel] = useState<GeneratedCarousel | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [generatingImageForSlide, setGeneratingImageForSlide] = useState<number | null>(null);
+  const [slideImages, setSlideImages] = useState<Record<number, string>>({});
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
+
+  useEffect(() => {
+    if (initialCarousel) {
+      setCarousel(initialCarousel);
+      if (initialCarousel.slideImages) {
+        setSlideImages(initialCarousel.slideImages);
+      }
+      setIsExpanded(true);
+      setCurrentSlideIndex(0);
+    }
+  }, [initialCarousel]);
 
   const handleGenerateCarousel = async () => {
     if (!postContent.trim()) {
@@ -31,6 +48,8 @@ export default function CarouselGenerator({
 
     setIsGenerating(true);
     setError(null);
+    setSuccessMessage(null);
+    setSlideImages({});
 
     try {
       const plainTextContent = htmlToPlainText(postContent);
@@ -63,12 +82,98 @@ export default function CarouselGenerator({
     }
   };
 
+  const handleGenerateSlideImage = async (slideNumber: number, imageSuggestion?: string) => {
+    if (!imageSuggestion) {
+      setError(language === 'kurdish' ? 'پێشنیاری وێنە نییە' : 'No image suggestion available');
+      return;
+    }
+
+    setGeneratingImageForSlide(slideNumber);
+    setError(null);
+
+    try {
+      const response = await fetch('/api/generate-image', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          imagePrompt: imageSuggestion,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to generate image');
+      }
+
+      const data = await response.json();
+      if (data.imageUrl) {
+        setSlideImages(prev => ({
+          ...prev,
+          [slideNumber]: data.imageUrl,
+        }));
+        setSuccessMessage(language === 'kurdish' ? 'وێنە دروستکرا!' : 'Image generated!');
+        setTimeout(() => setSuccessMessage(null), 2000);
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to generate image';
+      setError(errorMessage);
+    } finally {
+      setGeneratingImageForSlide(null);
+    }
+  };
+
+  const handleSaveAsDraft = async () => {
+    if (!carousel) return;
+
+    setIsSaving(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    try {
+      const title = carousel.slides[0]?.title || 'Untitled Carousel';
+      const response = await fetch('/api/carousels', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id: carousel.id, // Include ID if it exists (for updates in future, though backend might treat as new if logic isn't there)
+          title,
+          sourceContent: htmlToPlainText(postContent),
+          slides: carousel.slides,
+          totalSlides: carousel.totalSlides,
+          introduction: carousel.introduction,
+          conclusion: carousel.conclusion,
+          hashtags: carousel.hashtags,
+          imageTheme: carousel.imageTheme,
+          brandingGuidelines: carousel.brandingGuidelines,
+          language,
+          tone,
+          slideImages,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save carousel');
+      }
+
+      setSuccessMessage(language === 'kurdish' ? 'پاشەکەوت کرا بە سەرکەوتوویی' : 'Saved successfully!');
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (error) {
+      setError(language === 'kurdish' ? 'هەڵە لە پاشەکەوتکردن' : 'Failed to save');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleUseCarousel = () => {
     if (!carousel) return;
 
     // Format carousel as text with slide structure
     let carouselText = '';
-    
+
     if (carousel.introduction) {
       carouselText += carousel.introduction + '\n\n';
     }
@@ -123,6 +228,9 @@ export default function CarouselGenerator({
       if (slide.imageSuggestion) {
         exportText += `Image Suggestion: ${slide.imageSuggestion}\n`;
       }
+      if (slideImages[slide.slideNumber]) {
+        exportText += `Generated Image: [Base64 Image Available]\n`;
+      }
       exportText += '\n';
     });
 
@@ -138,30 +246,54 @@ export default function CarouselGenerator({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `carousel-post-${Date.now()}.txt`;
+    a.download = `linkedin-carousel-${Date.now()}.md`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
 
+  // Editing handlers
+  const handleSlideChange = (index: number, field: keyof CarouselSlide, value: string) => {
+    if (!carousel) return;
+
+    setCarousel(prev => {
+      if (!prev) return null;
+      const newSlides = [...prev.slides];
+      newSlides[index] = {
+        ...newSlides[index],
+        [field]: value,
+        characterCount: field === 'content' ? value.length : newSlides[index].characterCount
+      };
+      return {
+        ...prev,
+        slides: newSlides
+      };
+    });
+  };
+
   const currentSlide = carousel?.slides[currentSlideIndex];
 
   return (
-    <div className="bg-white rounded-xl shadow-md border border-gray-200/50 card-hover overflow-hidden">
+    <div className="glass-card overflow-hidden">
       <button
         type="button"
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full p-6 sm:p-8 flex items-center justify-between hover:bg-gray-50 transition-colors duration-200"
+        className="w-full p-6 sm:p-8 flex items-center justify-between hover:bg-[var(--bg-card-hover)] transition-colors duration-200"
       >
-        <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-          <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <h3 className="text-lg font-semibold text-[var(--text-primary)] flex items-center gap-2">
+          <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
           </svg>
           {language === 'kurdish' ? 'بەرهەمهێنانی Carousel' : 'Carousel Generator'}
+          {Object.keys(slideImages).length > 0 && (
+            <span className="text-xs bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded-full">
+              {Object.keys(slideImages).length} {language === 'kurdish' ? 'وێنە' : 'images'}
+            </span>
+          )}
         </h3>
         <svg
-          className={`w-5 h-5 text-gray-500 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}
+          className={`w-5 h-5 text-[var(--text-muted)] transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -171,14 +303,19 @@ export default function CarouselGenerator({
       </button>
 
       <div
-        className={`overflow-hidden transition-all duration-300 ease-in-out ${
-          isExpanded ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
-        }`}
+        className={`overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-[3000px] opacity-100' : 'max-h-0 opacity-0'
+          }`}
       >
-        <div className="px-6 sm:px-8 pb-6 sm:pb-8 border-t border-gray-200">
+        <div className="px-6 sm:px-8 pb-6 sm:pb-8 border-t border-[var(--border-default)]">
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border-l-4 border-red-500 rounded text-red-800 text-sm">
+            <div className="mb-4 p-3 bg-red-500/10 border-l-4 border-red-500 rounded text-red-400 text-sm">
               {error}
+            </div>
+          )}
+
+          {successMessage && (
+            <div className="mb-4 p-3 bg-green-500/10 border-l-4 border-green-500 rounded text-green-400 text-sm">
+              {successMessage}
             </div>
           )}
 
@@ -186,7 +323,7 @@ export default function CarouselGenerator({
             type="button"
             onClick={handleGenerateCarousel}
             disabled={isGenerating || !postContent.trim()}
-            className="w-full mb-4 bg-purple-600 text-white px-4 py-2.5 rounded-lg font-semibold hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2"
+            className="w-full mb-4 bg-gradient-to-r from-purple-500 to-violet-500 text-white px-4 py-2.5 rounded-lg font-semibold hover:from-purple-600 hover:to-violet-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2"
           >
             {isGenerating ? (
               <>
@@ -210,37 +347,29 @@ export default function CarouselGenerator({
             <div className="space-y-4">
               {/* Master Theme Display */}
               {carousel.imageTheme && (
-                <div className="p-4 bg-purple-50 border-l-4 border-purple-500 rounded-lg">
-                  <h4 className="text-sm font-semibold text-purple-900 mb-2 flex items-center gap-2">
+                <div className="p-4 bg-purple-500/10 border-l-4 border-purple-500 rounded-lg">
+                  <h4 className="text-sm font-semibold text-purple-400 mb-2 flex items-center gap-2">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
                     </svg>
-                    {language === 'kurdish' ? 'تێمی سەرەکی وێنەکان (بۆ هەموو سلایدەکان):' : 'Master Image Theme (Applies to All Slides):'}
+                    {language === 'kurdish' ? 'تێمی سەرەکی وێنەکان:' : 'Master Image Theme:'}
                   </h4>
-                  <p className="text-sm text-purple-800 whitespace-pre-wrap">{carousel.imageTheme}</p>
-                  {carousel.brandingGuidelines && (
-                    <div className="mt-2 pt-2 border-t border-purple-200">
-                      <p className="text-xs font-medium text-purple-700 mb-1">
-                        {language === 'kurdish' ? 'ڕێنماییەکانی براندینگ:' : 'Branding Guidelines:'}
-                      </p>
-                      <p className="text-xs text-purple-700 whitespace-pre-wrap">{carousel.brandingGuidelines}</p>
-                    </div>
-                  )}
+                  <p className="text-sm text-purple-300 whitespace-pre-wrap">{carousel.imageTheme}</p>
                 </div>
               )}
 
               {/* Slide Navigation */}
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+              <div className="flex items-center justify-between p-3 glass-card">
                 <button
                   type="button"
                   onClick={() => setCurrentSlideIndex(Math.max(0, currentSlideIndex - 1))}
                   disabled={currentSlideIndex === 0}
-                  className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="btn-secondary px-3 py-1.5 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {language === 'kurdish' ? 'پێشوو' : 'Previous'}
                 </button>
-                <span className="text-sm font-medium text-gray-700">
-                  {language === 'kurdish' 
+                <span className="text-sm font-medium text-[var(--text-secondary)]">
+                  {language === 'kurdish'
                     ? `سلاید ${currentSlideIndex + 1} لە ${carousel.totalSlides}`
                     : `Slide ${currentSlideIndex + 1} of ${carousel.totalSlides}`}
                 </span>
@@ -248,7 +377,7 @@ export default function CarouselGenerator({
                   type="button"
                   onClick={() => setCurrentSlideIndex(Math.min(carousel.slides.length - 1, currentSlideIndex + 1))}
                   disabled={currentSlideIndex === carousel.slides.length - 1}
-                  className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="btn-secondary px-3 py-1.5 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {language === 'kurdish' ? 'دواتر' : 'Next'}
                 </button>
@@ -256,43 +385,117 @@ export default function CarouselGenerator({
 
               {/* Current Slide Display */}
               {currentSlide && (
-                <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <div className="p-4 glass-card">
                   <div className="mb-3">
                     <div className="flex items-center justify-between mb-2">
-                      <h4 className="text-sm font-semibold text-gray-900">
+                      <h4 className="text-sm font-semibold text-[var(--text-primary)]">
                         {language === 'kurdish' ? 'سەردێڕ:' : 'Title:'}
                       </h4>
-                      <span className="text-xs text-gray-500">
+                      <span className="text-xs text-[var(--text-muted)]">
                         {currentSlide.characterCount} {language === 'kurdish' ? 'پیت' : 'chars'}
                       </span>
                     </div>
-                    <p className="text-base font-medium text-gray-800">{currentSlide.title}</p>
-                  </div>
-                  
-                  <div className="mb-3">
-                    <h4 className="text-sm font-semibold text-gray-900 mb-2">
-                      {language === 'kurdish' ? 'ناوەڕۆک:' : 'Content:'}
-                    </h4>
-                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{currentSlide.content}</p>
+                    <input
+                      type="text"
+                      value={currentSlide.title}
+                      onChange={(e) => handleSlideChange(currentSlideIndex, 'title', e.target.value)}
+                      className="w-full bg-[var(--bg-input)] border border-[var(--border-default)] rounded-lg px-3 py-2 text-[var(--text-primary)] focus:outline-none focus:border-purple-500 transition-colors"
+                      placeholder="Slide Title"
+                    />
                   </div>
 
-                  {currentSlide.imageSuggestion && (
-                    <div className="mt-3 pt-3 border-t border-gray-200">
-                      <h4 className="text-xs font-semibold text-purple-700 mb-1 flex items-center gap-1">
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                        {language === 'kurdish' ? 'پێشنیاری وێنە:' : 'Image Suggestion:'}
-                      </h4>
-                      <p className="text-xs text-gray-600 whitespace-pre-wrap">{currentSlide.imageSuggestion}</p>
-                    </div>
-                  )}
+                  <div className="mb-3">
+                    <h4 className="text-sm font-semibold text-[var(--text-primary)] mb-2">
+                      {language === 'kurdish' ? 'ناوەڕۆک:' : 'Content:'}
+                    </h4>
+                    <textarea
+                      value={currentSlide.content}
+                      onChange={(e) => handleSlideChange(currentSlideIndex, 'content', e.target.value)}
+                      rows={4}
+                      className="w-full bg-[var(--bg-input)] border border-[var(--border-default)] rounded-lg px-3 py-2 text-[var(--text-secondary)] focus:outline-none focus:border-purple-500 transition-colors resize-y"
+                      placeholder="Slide Content"
+                    />
+                  </div>
+
+                  {/* Image Section */}
+                  <div className="mt-3 pt-3 border-t border-[var(--border-default)]">
+                    {slideImages[currentSlide.slideNumber] ? (
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="text-xs font-semibold text-purple-400 flex items-center gap-1">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            {language === 'kurdish' ? 'وێنەی دروستکراو:' : 'Generated Image:'}
+                          </h4>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              // Allow regenerating image
+                              if (confirm('Regenerate this image?')) {
+                                handleGenerateSlideImage(currentSlide.slideNumber, currentSlide.imageSuggestion);
+                              }
+                            }}
+                            className="text-xs text-[var(--text-muted)] hover:text-purple-400 transition-colors"
+                          >
+                            Regenerate
+                          </button>
+                        </div>
+                        <img
+                          src={slideImages[currentSlide.slideNumber]}
+                          alt={`Slide ${currentSlide.slideNumber}`}
+                          className="w-full rounded-lg max-h-64 object-cover"
+                        />
+                      </div>
+                    ) : (
+                      <div>
+                        <h4 className="text-xs font-semibold text-purple-400 mb-1 flex items-center gap-1">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          {language === 'kurdish' ? 'پێشنیاری وێنە:' : 'Image Suggestion:'}
+                        </h4>
+                        <div className="flex gap-2 mb-2">
+                          <input
+                            type="text"
+                            value={currentSlide.imageSuggestion || ''}
+                            onChange={(e) => handleSlideChange(currentSlideIndex, 'imageSuggestion', e.target.value)}
+                            className="flex-1 bg-[var(--bg-input)] border border-[var(--border-default)] rounded px-2 py-1 text-xs text-[var(--text-secondary)] focus:outline-none focus:border-purple-500"
+                            placeholder="Image Prompt"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleGenerateSlideImage(currentSlide.slideNumber, currentSlide.imageSuggestion)}
+                          disabled={generatingImageForSlide === currentSlide.slideNumber || !currentSlide.imageSuggestion}
+                          className="btn-secondary py-1.5 px-3 text-xs w-full justify-center disabled:opacity-50"
+                        >
+                          {generatingImageForSlide === currentSlide.slideNumber ? (
+                            <>
+                              <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              <span>{language === 'kurdish' ? 'دروستکردنی وێنە...' : 'Generating Image...'}</span>
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                              </svg>
+                              <span>{language === 'kurdish' ? 'دروستکردنی وێنە' : 'Generate Image'}</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
               {/* All Slides Overview */}
               <div className="mt-4">
-                <h4 className="text-sm font-semibold text-gray-900 mb-2">
+                <h4 className="text-sm font-semibold text-[var(--text-primary)] mb-2">
                   {language === 'kurdish' ? 'پێداچوونەوەی هەموو سلایدەکان:' : 'All Slides Overview:'}
                 </h4>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto">
@@ -301,35 +504,55 @@ export default function CarouselGenerator({
                       key={index}
                       type="button"
                       onClick={() => setCurrentSlideIndex(index)}
-                      className={`p-2 text-xs rounded-lg border transition-colors ${
-                        currentSlideIndex === index
-                          ? 'bg-purple-100 border-purple-300 text-purple-700'
-                          : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
-                      }`}
+                      className={`p-2 text-xs rounded-lg border transition-colors relative ${currentSlideIndex === index
+                        ? 'bg-purple-500/20 border-purple-500/50 text-purple-300'
+                        : 'bg-[var(--bg-input)] border-[var(--border-default)] text-[var(--text-secondary)] hover:bg-[var(--bg-card-hover)]'
+                        }`}
                     >
                       <div className="font-medium">#{slide.slideNumber}</div>
-                      <div className="text-xs text-gray-500 truncate mt-1">{slide.title}</div>
+                      <div className="text-xs text-[var(--text-muted)] truncate mt-1">{slide.title}</div>
+                      {slideImages[slide.slideNumber] && (
+                        <span className="absolute -top-1 -right-1 w-2 h-2 bg-green-400 rounded-full"></span>
+                      )}
                     </button>
                   ))}
                 </div>
               </div>
 
               {/* Actions */}
-              <div className="grid grid-cols-2 gap-3 mt-4">
+              <div className="grid grid-cols-3 gap-3 mt-4">
                 <button
                   type="button"
                   onClick={handleUseCarousel}
-                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium text-sm flex items-center justify-center gap-2"
+                  className="btn-primary py-2 text-sm justify-center"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  {language === 'kurdish' ? 'بەکارهێنان' : 'Use Carousel'}
+                  {language === 'kurdish' ? 'بەکارهێنان' : 'Use'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveAsDraft}
+                  disabled={isSaving}
+                  className="btn-secondary py-2 text-sm justify-center"
+                >
+                  {isSaving ? (
+                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                    </svg>
+                  )}
+                  {language === 'kurdish' ? 'پاشەکەوت' : 'Save'}
                 </button>
                 <button
                   type="button"
                   onClick={handleExportCarousel}
-                  className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium text-sm flex items-center justify-center gap-2"
+                  className="btn-secondary py-2 text-sm justify-center"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />

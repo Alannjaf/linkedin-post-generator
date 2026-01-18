@@ -13,15 +13,36 @@ function parseHooks(content: string, language: Language): GeneratedHook[] {
   const hooks: GeneratedHook[] = [];
   const hookStyles: HookStyle[] = ['question', 'statement', 'story', 'statistic'];
 
+  // Patterns to skip (introductory/meta text)
+  const skipPatternsEnglish = /^(here|sure|certainly|of course|based on|these are|i've|i have|let me|below|following|great|absolutely|happy to)/i;
+  const skipPatternsKurdish = /^(هۆک|پێشنیار|نموونە|ئەمانە|لێرەدا)/i;
+  const numberedPrefix = /^\d+[\.\)\-:]\s*/;
+  const bulletPrefix = /^[\-\*•]\s*/;
+
   for (let i = 0; i < lines.length && hooks.length < 5; i++) {
-    const line = lines[i];
-    
+    let line = lines[i];
+
     // Skip meta-commentary
     if (language === 'kurdish') {
-      if (line.match(/^هۆک|^پێشنیار|^نموونە/i)) continue;
+      if (skipPatternsKurdish.test(line)) continue;
     } else {
+      if (skipPatternsEnglish.test(line)) continue;
       if (line.match(/^hook|^option|^suggestion|^example/i)) continue;
     }
+
+    // Skip very short lines (likely headers or labels)
+    if (line.length < 15) continue;
+
+    // Remove numbered prefixes (1., 2), 3-, etc.)
+    line = line.replace(numberedPrefix, '').trim();
+    // Remove bullet prefixes
+    line = line.replace(bulletPrefix, '').trim();
+
+    // Skip if too short after cleanup
+    if (line.length < 10) continue;
+
+    // Remove surrounding quotes if present
+    line = line.replace(/^["']|["']$/g, '').trim();
 
     // Try to detect hook style
     let detectedStyle: HookStyle = 'statement';
@@ -29,7 +50,7 @@ function parseHooks(content: string, language: Language): GeneratedHook[] {
       detectedStyle = 'question';
     } else if (line.match(/^\d+[%]|^\d+ out of|\d+ percent|statistics?|data shows|research shows/i)) {
       detectedStyle = 'statistic';
-    } else if (line.match(/^(once|when|years? ago|last|recently|story|tale)/i)) {
+    } else if (line.match(/^(once|when|years? ago|last|recently|story|tale|i remember|it was)/i)) {
       detectedStyle = 'story';
     }
 

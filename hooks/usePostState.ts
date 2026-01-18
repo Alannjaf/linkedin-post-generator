@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Language, Tone, PostLength } from '@/types';
+import { Language, Tone, PostLength, GeneratedCarousel } from '@/types';
 import { plainTextToHtml } from '@/lib/linkedin-formatter';
 
 export interface UsePostStateReturn {
@@ -13,7 +13,9 @@ export interface UsePostStateReturn {
   currentTone: Tone;
   currentLength: PostLength;
   originalContext: string;
-  
+  currentDraftId: string | null;
+  currentCarousel: GeneratedCarousel | null;
+
   // Setters
   setPostContent: (content: string) => void;
   setHashtags: (hashtags: string[]) => void;
@@ -22,7 +24,9 @@ export interface UsePostStateReturn {
   setCurrentTone: (tone: Tone) => void;
   setCurrentLength: (length: PostLength) => void;
   setOriginalContext: (context: string) => void;
-  
+  setCurrentDraftId: (id: string | null) => void;
+  setCurrentCarousel: (carousel: GeneratedCarousel | null) => void;
+
   // Actions
   handlePostGenerated: (content: string, generatedHashtags: string[], language: Language, tone: Tone, length: PostLength, context: string) => void;
   handleAddHashtag: (hashtag: string) => void;
@@ -38,6 +42,8 @@ export function usePostState(): UsePostStateReturn {
   const [currentTone, setCurrentTone] = useState<Tone>('professional');
   const [currentLength, setCurrentLength] = useState<PostLength>('medium');
   const [originalContext, setOriginalContext] = useState<string>('');
+  const [currentDraftId, setCurrentDraftId] = useState<string | null>(null);
+  const [currentCarousel, setCurrentCarousel] = useState<GeneratedCarousel | null>(null);
 
   const handlePostGenerated = useCallback((
     content: string,
@@ -52,7 +58,7 @@ export function usePostState(): UsePostStateReturn {
     if (content && !content.includes('<') && !content.includes('>')) {
       htmlContent = plainTextToHtml(content);
     }
-    
+
     setPostContent(htmlContent);
     setHashtags(generatedHashtags);
     setSelectedHashtags([]);
@@ -60,6 +66,7 @@ export function usePostState(): UsePostStateReturn {
     setCurrentTone(tone);
     setCurrentLength(length);
     setOriginalContext(context);
+    setCurrentDraftId(null); // New generation, clear draft ID
   }, []);
 
   const handleAddHashtag = useCallback((hashtag: string) => {
@@ -81,6 +88,7 @@ export function usePostState(): UsePostStateReturn {
       setHashtags([]);
       setSelectedHashtags([]);
       setOriginalContext('');
+      setCurrentDraftId(null); // Clear draft ID when clearing content
     }
   }, []);
 
@@ -93,7 +101,9 @@ export function usePostState(): UsePostStateReturn {
     currentTone,
     currentLength,
     originalContext,
-    
+    currentDraftId,
+    currentCarousel,
+
     // Setters
     setPostContent,
     setHashtags,
@@ -102,7 +112,9 @@ export function usePostState(): UsePostStateReturn {
     setCurrentTone,
     setCurrentLength,
     setOriginalContext,
-    
+    setCurrentDraftId,
+    setCurrentCarousel,
+
     // Actions
     handlePostGenerated,
     handleAddHashtag,

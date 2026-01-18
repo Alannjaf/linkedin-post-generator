@@ -6,8 +6,75 @@ import { callOpenRouterForCarousel } from "@/lib/api/openrouter-client";
 import { logger } from "@/lib/utils/logger";
 
 function parseCarousel(content: string, language: Language, originalLength: number): GeneratedCarousel {
-  const lines = content.split('\n').map(line => line.trim()).filter(line => line.length > 0);
-  
+  // Filter out introductory text patterns - expanded list
+  const introPatterns = [
+    /^here(?:'s| is| are)/i,
+    /^i(?:'ve| have) created/i,
+    /^based on (?:your|the)/i,
+    /^let me (?:create|generate|provide)/i,
+    /^(?:certainly|sure|of course)[,!]?\s*/i,
+    /^this carousel/i,
+    /^(?:below|following) (?:is|are)/i,
+    /^\*\*carousel/i,
+    /^here's a linkedin carousel/i,
+    /^for this carousel/i,
+    /^here is the linkedin post/i,
+    /^the linkedin post converted/i,
+    /^converted into a/i,
+    /^i've converted/i,
+    /^this is a carousel/i,
+    /^the following carousel/i,
+    /^\*\*background:/i,
+    /^background:/i,
+    /^فەرموو/i,
+    /^ئەمەش/i,
+    /^بەڵێ/i,
+    /^لێرەدا/i,
+    /^بە دڵنیاییەوە/i,
+  ];
+
+  const shouldSkipLine = (line: string): boolean => {
+    const trimmed = line.trim();
+    const lowerTrimmed = trimmed.toLowerCase();
+
+    // Check if it's a slide key
+    if (/^SLIDE\s*\d+/i.test(trimmed) || /^سلاید\s*\d+/i.test(trimmed)) return false;
+
+    if (trimmed.length < 5) return false; // Keep short lines
+
+    // Skip lines that start with intro patterns
+    if (introPatterns.some(pattern => pattern.test(lowerTrimmed))) {
+      return true;
+    }
+
+    // Skip lines that are just formatting markers without content
+    if (/^\*+$/.test(trimmed) || /^-+$/.test(trimmed) || /^=+$/.test(trimmed)) {
+      return true;
+    }
+
+    return false;
+  };
+
+  // Also filter title to remove intro text
+  const cleanField = (text: string): string => {
+    let cleaned = text.trim();
+    // Remove markdown bold markers and other common noise
+    cleaned = cleaned.replace(/^[\*#\-_]+|[\*#\-_]+$/g, '').trim();
+
+    // Skip if it looks like intro text
+    if (introPatterns.some(pattern => pattern.test(cleaned.toLowerCase()))) {
+      return '';
+    }
+    return cleaned;
+  };
+
+  let lines = content.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+
+  // Filter out intro lines at the beginning
+  while (lines.length > 0 && shouldSkipLine(lines[0])) {
+    lines.shift();
+  }
+
   const slides: CarouselSlide[] = [];
   let currentSlide: Partial<CarouselSlide> | null = null;
   let imageTheme: string | undefined;
@@ -16,34 +83,34 @@ function parseCarousel(content: string, language: Language, originalLength: numb
   let conclusion: string | undefined;
   const hashtags: string[] = [];
 
-  // Patterns to detect slide structure
+  // Patterns to detect slide structure - robust against markdown
+  // Matches: "SLIDE 1:", "**SLIDE 1**:", "### SLIDE 1"
   const slidePattern = language === 'kurdish'
-    ? /^SLIDE\s*(\d+):?|^سلاید\s*(\d+):?/i
-    : /^SLIDE\s*(\d+):?/i;
-  
+    ? /^(?:#{1,6}\s*|\*{0,2})?(?:SLIDE|سلاید)\s*(\d+)[:\.]?(?:\*{0,2})?/i
+    : /^(?:#{1,6}\s*|\*{0,2})?SLIDE\s*(\d+)[:\.]?(?:\*{0,2})?/i;
+
   const titlePattern = language === 'kurdish'
-    ? /^TITLE:|^سەردێڕ:/i
-    : /^TITLE:/i;
-  
+    ? /^(?:#{1,6}\s*|\*{0,2})?(?:TITLE|سەردێڕ)[:\-]?\s*(?:\*{0,2})?/i
+    : /^(?:#{1,6}\s*|\*{0,2})?TITLE[:\-]?\s*(?:\*{0,2})?/i;
+
   const contentPattern = language === 'kurdish'
-    ? /^CONTENT:|^ناوەڕۆک:/i
-    : /^CONTENT:/i;
-  
+    ? /^(?:#{1,6}\s*|\*{0,2})?(?:CONTENT|ناوەڕۆک)[:\-]?\s*(?:\*{0,2})?/i
+    : /^(?:#{1,6}\s*|\*{0,2})?CONTENT[:\-]?\s*(?:\*{0,2})?/i;
+
   const imagePattern = language === 'kurdish'
-    ? /^IMAGE:|^وێنە:/i
-    : /^IMAGE:/i;
-  
+    ? /^(?:#{1,6}\s*|\*{0,2})?(?:IMAGE|وێنە)[:\-]?\s*(?:\*{0,2})?/i
+    : /^(?:#{1,6}\s*|\*{0,2})?IMAGE[:\-]?\s*(?:\*{0,2})?/i;
+
   const themePattern = language === 'kurdish'
     ? /(?:تێم|theme|master.*theme|branding)/i
     : /(?:master.*theme|theme|branding|image.*theme)/i;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    
+
     // Check for slide start
     const slideMatch = line.match(slidePattern);
     if (slideMatch) {
-      // Save previous slide if exists
       if (currentSlide && currentSlide.title && currentSlide.content) {
         const slideContent = (currentSlide.title || '') + ' ' + (currentSlide.content || '');
         slides.push({
@@ -55,17 +122,22 @@ function parseCarousel(content: string, language: Language, originalLength: numb
           keyPoints: currentSlide.keyPoints,
         });
       }
-      
-      // Start new slide
-      const slideNum = parseInt(slideMatch[1] || slideMatch[2] || '1', 10);
+
+      const slideNum = parseInt(slideMatch[1] || '1', 10);
       currentSlide = { slideNumber: slideNum };
+      continue;
+    }
+
+    // Skip introductory lines ONLY if we haven't found a slide yet
+    if (slides.length === 0 && !currentSlide && shouldSkipLine(line)) {
       continue;
     }
 
     // Check for title
     if (titlePattern.test(line)) {
       if (currentSlide) {
-        currentSlide.title = line.replace(titlePattern, '').trim();
+        const rawTitle = line.replace(titlePattern, '');
+        currentSlide.title = cleanField(rawTitle);
       }
       continue;
     }
@@ -73,7 +145,8 @@ function parseCarousel(content: string, language: Language, originalLength: numb
     // Check for content
     if (contentPattern.test(line)) {
       if (currentSlide) {
-        currentSlide.content = line.replace(contentPattern, '').trim();
+        const rawContent = line.replace(contentPattern, '');
+        currentSlide.content = cleanField(rawContent);
       }
       continue;
     }
@@ -81,16 +154,16 @@ function parseCarousel(content: string, language: Language, originalLength: numb
     // Check for image
     if (imagePattern.test(line)) {
       if (currentSlide) {
-        currentSlide.imageSuggestion = line.replace(imagePattern, '').trim();
+        const rawImage = line.replace(imagePattern, '');
+        currentSlide.imageSuggestion = cleanField(rawImage);
       }
       continue;
     }
 
     // Check for theme/branding
-    if (themePattern.test(line) || (i > lines.length - 5 && line.length > 50)) {
-      // Likely theme description at the end
+    if (themePattern.test(line)) {
       if (!imageTheme) {
-        imageTheme = line;
+        imageTheme = cleanField(line.replace(themePattern, '').replace(/^[:\-\s]+/, ''));
       } else {
         brandingGuidelines = line;
       }

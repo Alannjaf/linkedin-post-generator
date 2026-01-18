@@ -159,6 +159,8 @@ export interface CarouselSlide {
 }
 
 export interface GeneratedCarousel {
+  id?: string; // Optional ID for saved/loaded carousels
+  slideImages?: Record<number, string>; // Map of slide number to image URL
   slides: CarouselSlide[];
   totalSlides: number;
   introduction?: string;

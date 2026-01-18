@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import DraftManager from '@/components/DraftManager';
 import TrendingPostsPanel from '@/components/TrendingPostsPanel';
 import SavedPostsPanel from '@/components/SavedPostsPanel';
+import SavedContentManager from '@/components/SavedContentManager';
 import WorkflowStepper from '@/components/WorkflowStepper';
 import FloatingActionMenu from '@/components/FloatingActionMenu';
 import Toast from '@/components/Toast';
@@ -15,10 +16,12 @@ import PreviewStats from '@/components/PreviewStats';
 import { saveDraft, getAllDrafts } from '@/lib/storage';
 import { savePost, getAllSavedPosts, deleteSavedPost } from '@/lib/saved-posts';
 import { convertHtmlToLinkedInFormat, htmlToPlainText, plainTextToHtml } from '@/lib/linkedin-formatter';
-import { Language, Tone, PostLength, Draft, TrendingPost } from '@/types';
+import { Language, Tone, PostLength, Draft, TrendingPost, GeneratedCarousel } from '@/types';
 import { usePostState } from '@/hooks/usePostState';
 import { useImageGeneration } from '@/hooks/useImageGeneration';
 import { useDraftsAndSaved } from '@/hooks/useDraftsAndSaved';
+import { CarouselRow } from '@/lib/db';
+
 
 export default function Home() {
   const [error, setError] = useState<string | null>(null);
@@ -88,20 +91,6 @@ export default function Home() {
     }
   }, [getFinalPost]);
 
-  const handleExport = useCallback(() => {
-    const finalPost = getFinalPost();
-    const blob = new Blob([finalPost], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `linkedin-post-${Date.now()}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    setToast({ message: 'Post exported!', type: 'success' });
-    setError(null);
-  }, [getFinalPost]);
 
   const handleLoadDraft = useCallback((draft: Draft) => {
     // Handle backward compatibility: convert plain text to HTML if needed
@@ -119,6 +108,7 @@ export default function Home() {
     postState.setCurrentTone(draft.tone);
     postState.setCurrentLength(draft.length);
     postState.setOriginalContext(draft.originalContext || '');
+    postState.setCurrentDraftId(draft.id); // Track the loaded draft ID
     imageGeneration.setGeneratedImage(draft.generatedImage || null);
     imageGeneration.setImagePrompt(draft.imagePrompt || '');
     imageGeneration.setEditedImagePrompt(draft.editedImagePrompt || draft.imagePrompt || '');
@@ -161,6 +151,45 @@ export default function Home() {
   const handleDeleteSavedPost = useCallback(async (postId: string) => {
     await draftsAndSaved.handleDeleteSavedPost(postId);
   }, [draftsAndSaved]);
+
+  const handleUseCarousel = useCallback((carouselRow: CarouselRow) => {
+    // Map CarouselRow to GeneratedCarousel
+    const generatedCarousel: GeneratedCarousel = {
+      id: carouselRow.id,
+      slides: carouselRow.slides.map(slide => ({
+        slideNumber: slide.slideNumber,
+        title: slide.title,
+        content: slide.content,
+        imageSuggestion: slide.imageSuggestion,
+        characterCount: slide.characterCount
+      })),
+      totalSlides: carouselRow.total_slides,
+      introduction: carouselRow.introduction,
+      conclusion: carouselRow.conclusion,
+      hashtags: carouselRow.hashtags,
+      imageTheme: carouselRow.image_theme,
+      brandingGuidelines: carouselRow.branding_guidelines,
+      metadata: {
+        originalLength: carouselRow.source_content.length,
+        carouselLength: 0, // Not stored in DB row, can calculate or ignore
+        averageSlideLength: Math.round(carouselRow.source_content.length / carouselRow.total_slides) // Approximation
+      },
+      slideImages: carouselRow.slide_images
+    };
+
+    postState.setCurrentCarousel(generatedCarousel);
+    postState.setPostContent(carouselRow.source_content);
+
+    // Scroll to enhancement section
+    setTimeout(() => {
+      const element = document.getElementById('enhance-section');
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
+
+    setToast({ message: 'Carousel loaded for editing!', type: 'success' });
+  }, [postState]);
 
 
   const getCurrentStep = useCallback((): 'generate' | 'edit' | 'enhance' | 'export' => {
@@ -253,11 +282,23 @@ export default function Home() {
           imagePrompt={imageGeneration.imagePrompt}
           editedImagePrompt={imageGeneration.editedImagePrompt}
           originalContext={postState.originalContext}
+          currentDraftId={postState.currentDraftId}
+          onDraftIdUpdate={postState.setCurrentDraftId}
         />
 
         {/* Enhance & Export Sections */}
         {postState.postContent && (
           <>
+            <EnhancementSection
+              postContent={postState.postContent}
+              currentLanguage={postState.currentLanguage}
+              currentTone={postState.currentTone}
+              imageGeneration={imageGeneration}
+              onPostContentChange={postState.setPostContent}
+              onToast={(msg, type) => setToast({ message: msg, type })}
+              initialCarousel={postState.currentCarousel}
+            />
+
             <ExportSection
               postContent={postState.postContent}
               selectedHashtags={postState.selectedHashtags}
@@ -269,15 +310,6 @@ export default function Home() {
               originalContext={postState.originalContext}
               setSuccess={(msg) => setSuccess(msg)}
               setError={(msg) => setError(msg)}
-            />
-
-            <EnhancementSection
-              postContent={postState.postContent}
-              currentLanguage={postState.currentLanguage}
-              currentTone={postState.currentTone}
-              imageGeneration={imageGeneration}
-              onPostContentChange={postState.setPostContent}
-              onToast={(msg, type) => setToast({ message: msg, type })}
             />
           </>
         )}
@@ -325,12 +357,11 @@ export default function Home() {
       <FloatingActionMenu
         onDraftsClick={() => draftsAndSaved.setIsDraftManagerOpen(true)}
         onSavedPostsClick={() => draftsAndSaved.setIsSavedPostsOpen(true)}
+        onSavedContentClick={() => draftsAndSaved.setIsSavedContentOpen(true)}
         onCopyClick={postState.postContent ? handleCopyToClipboard : undefined}
-        onExportClick={postState.postContent ? handleExport : undefined}
         draftsCount={draftsAndSaved.draftsCount}
         savedPostsCount={draftsAndSaved.savedPostsCount}
         canCopy={!!postState.postContent}
-        canExport={!!postState.postContent}
       />
 
       {/* Draft Manager */}
@@ -352,6 +383,19 @@ export default function Home() {
         isOpen={draftsAndSaved.isSavedPostsOpen}
         onClose={() => draftsAndSaved.setIsSavedPostsOpen(false)}
       />
+
+      {/* Saved Content Manager (Adapted Posts & Carousels) */}
+      {draftsAndSaved.isSavedContentOpen && (
+        <SavedContentManager
+          isOpen={draftsAndSaved.isSavedContentOpen}
+          onClose={() => draftsAndSaved.setIsSavedContentOpen(false)}
+          onUseAdaptedPost={(content) => {
+            postState.setPostContent(plainTextToHtml(content));
+            setToast({ message: 'Adapted content loaded!', type: 'success' });
+          }}
+          onUseCarousel={handleUseCarousel}
+        />
+      )}
     </main>
   );
 }

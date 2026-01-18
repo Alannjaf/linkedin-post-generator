@@ -49,20 +49,7 @@ export default function ExportSection({
     }
   }, [getFinalPost, setSuccess, setError]);
 
-  const handleExport = useCallback(() => {
-    const finalPost = getFinalPost();
-    const blob = new Blob([finalPost], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `linkedin-post-${Date.now()}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    setSuccess('Post exported!');
-    setError('');
-  }, [getFinalPost, setSuccess, setError]);
+
 
   const handleGenerateImagePrompt = useCallback(() => {
     return imageGeneration.handleGenerateImagePrompt(
@@ -113,16 +100,7 @@ export default function ExportSection({
                 </svg>
                 Copy to Clipboard
               </button>
-              <button
-                type="button"
-                onClick={handleExport}
-                className="btn-secondary py-3 justify-center border-emerald-500/30 hover:border-emerald-500/50 text-emerald-400"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                Export as Text
-              </button>
+
             </div>
           </div>
 
