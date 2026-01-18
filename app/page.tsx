@@ -106,12 +106,12 @@ export default function Home() {
   const handleLoadDraft = useCallback((draft: Draft) => {
     // Handle backward compatibility: convert plain text to HTML if needed
     let content = draft.content;
-    
+
     // Check if content is plain text (doesn't contain HTML tags)
     if (content && !content.includes('<') && !content.includes('>')) {
       content = plainTextToHtml(content);
     }
-    
+
     postState.setPostContent(content);
     postState.setHashtags(draft.hashtags);
     postState.setSelectedHashtags(draft.hashtags);
@@ -171,9 +171,9 @@ export default function Home() {
   }, [postState]);
 
   const handleStepClick = useCallback((step: 'generate' | 'edit' | 'enhance' | 'export') => {
-    const elementId = step === 'generate' ? 'generate-section' : 
-                     step === 'edit' ? 'edit-section' :
-                     step === 'enhance' ? 'enhance-section' : 'export-section';
+    const elementId = step === 'generate' ? 'generate-section' :
+      step === 'edit' ? 'edit-section' :
+        step === 'enhance' ? 'enhance-section' : 'export-section';
     const element = document.getElementById(elementId);
     if (element) {
       element.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -181,32 +181,43 @@ export default function Home() {
   }, []);
 
   const currentStep = useMemo(() => getCurrentStep(), [getCurrentStep]);
-  
+
   // Memoize character count calculation
   const characterCount = useMemo(() => htmlToPlainText(postState.postContent).length, [postState.postContent]);
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
+    <main className="min-h-screen">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
-        <header className="mb-8 sm:mb-10">
-          <h1 className="text-4xl sm:text-5xl font-bold text-gray-900 mb-3 tracking-tight">
-            LinkedIn Post Generator
-          </h1>
-          <p className="text-lg text-gray-600 max-w-2xl mb-6">
-            Generate professional LinkedIn posts from your draft ideas using AI
+        {/* Header with gradient text */}
+        <header className="mb-10 sm:mb-14">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center shadow-lg shadow-purple-500/25">
+              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            </div>
+            <h1 className="text-4xl sm:text-5xl font-bold tracking-tight">
+              <span className="gradient-text">LinkedIn Post</span>{' '}
+              <span className="text-[var(--text-primary)]">Generator</span>
+            </h1>
+          </div>
+          <p className="text-lg text-[var(--text-secondary)] max-w-2xl mb-8">
+            Create engaging, professional LinkedIn posts powered by AI. Transform your ideas into compelling content.
           </p>
-          
+
           {/* Workflow Stepper */}
           <WorkflowStepper currentStep={currentStep} onStepClick={handleStepClick} />
         </header>
 
-        {/* Critical Error Messages (stay at top) */}
+        {/* Critical Error Messages */}
         {error && (error.includes('Failed to generate') || error.includes('API error')) && (
-          <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded-lg text-red-800 shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
-            <div className="flex items-center gap-2">
-              <svg className="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-              </svg>
+          <div className="mb-6 p-4 glass-card border-l-4 border-red-500 text-red-400 animate-fade-in">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center flex-shrink-0">
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+              </div>
               <span className="font-medium">{error}</span>
             </div>
           </div>
@@ -272,8 +283,8 @@ export default function Home() {
         )}
 
         {/* Trending Posts Section - Full Width */}
-        <div className="mt-6 lg:mt-8">
-          <TrendingPostsPanel 
+        <div className="mt-8 lg:mt-12">
+          <TrendingPostsPanel
             onUseAsInspiration={handleUseAsInspiration}
             onSavePost={handleSavePost}
             savedPostIds={draftsAndSaved.savedPostIds}
@@ -282,17 +293,19 @@ export default function Home() {
 
         {/* Enhanced Preview Section */}
         {postState.postContent && (
-          <div className="mt-8 lg:mt-10">
-            <div className="bg-white p-6 sm:p-8 rounded-xl shadow-md border border-gray-200/50 card-hover">
+          <div className="mt-8 lg:mt-12">
+            <div className="glass-card gradient-border p-6 sm:p-8">
               <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                  <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                  </svg>
+                <h3 className="text-xl font-bold text-[var(--text-primary)] flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-blue-500/25">
+                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                  </div>
                   LinkedIn Preview
                 </h3>
-                <PreviewStats 
+                <PreviewStats
                   content={postState.postContent}
                   selectedHashtags={postState.selectedHashtags}
                 />
@@ -321,7 +334,7 @@ export default function Home() {
       />
 
       {/* Draft Manager */}
-      <DraftManager 
+      <DraftManager
         onLoadDraft={(draft) => {
           handleLoadDraft(draft);
           draftsAndSaved.setIsDraftManagerOpen(false);
@@ -331,7 +344,7 @@ export default function Home() {
       />
 
       {/* Saved Posts Panel */}
-      <SavedPostsPanel 
+      <SavedPostsPanel
         onUseAsInspiration={handleUseAsInspiration}
         onPostDeleted={() => {
           draftsAndSaved.refreshSavedPostIds();

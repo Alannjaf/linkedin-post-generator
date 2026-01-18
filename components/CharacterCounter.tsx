@@ -11,9 +11,9 @@ export default function CharacterCounter({ count, limit = 3000 }: CharacterCount
   const isNearLimit = count > limit * 0.9;
 
   const getColor = () => {
-    if (isOverLimit) return 'text-red-600';
-    if (isNearLimit) return 'text-yellow-600';
-    return 'text-gray-600';
+    if (isOverLimit) return 'text-red-400';
+    if (isNearLimit) return 'text-amber-400';
+    return 'text-[var(--text-muted)]';
   };
 
   return (
@@ -22,16 +22,15 @@ export default function CharacterCounter({ count, limit = 3000 }: CharacterCount
         {count.toLocaleString()} / {limit.toLocaleString()}
       </span>
       {isOverLimit && (
-        <span className="text-red-600 text-xs font-semibold bg-red-50 px-2 py-0.5 rounded-md">
+        <span className="text-red-400 text-xs font-semibold bg-red-500/20 px-2 py-0.5 rounded-md border border-red-500/30">
           Over limit
         </span>
       )}
       {isNearLimit && !isOverLimit && (
-        <span className="text-yellow-600 text-xs font-medium bg-yellow-50 px-2 py-0.5 rounded-md">
+        <span className="text-amber-400 text-xs font-medium bg-amber-500/20 px-2 py-0.5 rounded-md border border-amber-500/30">
           Approaching limit
         </span>
       )}
     </div>
   );
 }
-
