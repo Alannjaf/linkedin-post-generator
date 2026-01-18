@@ -3,12 +3,16 @@
 import { useState, useEffect } from 'react';
 import { Language, Tone, GeneratedCarousel, CarouselSlide } from '@/types';
 import { htmlToPlainText, plainTextToHtml } from '@/lib/linkedin-formatter';
+import SavedContentManager from './SavedContentManager';
+import SlideExportTemplate from './SlideExportTemplate';
+import { exportCarouselToPDF } from '@/utils/CarouselPDFExport';
+import CarouselEditor from './CarouselEditor';
 
 interface CarouselGeneratorProps {
   postContent: string;
   language: Language;
   tone: Tone;
-  onCarouselSelected: (carouselContent: string) => void;
+  onCarouselSelected?: (carouselText: string) => void;
   initialCarousel?: GeneratedCarousel | null;
 }
 
@@ -28,6 +32,9 @@ export default function CarouselGenerator({
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState(0);
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
 
   useEffect(() => {
     if (initialCarousel) {
@@ -196,7 +203,9 @@ export default function CarouselGenerator({
     }
 
     const htmlContent = plainTextToHtml(carouselText);
-    onCarouselSelected(htmlContent);
+    if (onCarouselSelected) {
+      onCarouselSelected(htmlContent);
+    }
   };
 
   const handleExportCarousel = () => {
@@ -253,6 +262,29 @@ export default function CarouselGenerator({
     URL.revokeObjectURL(url);
   };
 
+  const handleExportPDF = async () => {
+    if (!carousel) return;
+
+    setIsExporting(true);
+    setExportProgress(0);
+
+    try {
+      await exportCarouselToPDF(
+        carousel.slides[0]?.title || 'Unknown Carousel',
+        carousel.totalSlides,
+        (progress) => setExportProgress(progress)
+      );
+      setSuccessMessage(language === 'kurdish' ? 'PDF بە سەرکەوتوویی دروستکرا' : 'PDF generated successfully!');
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (error) {
+      console.error('PDF Export Error:', error);
+      setError(language === 'kurdish' ? 'هەڵە لە دروستکردنی PDF' : 'Failed to generate PDF');
+    } finally {
+      setIsExporting(false);
+      setExportProgress(0);
+    }
+  };
+
   // Editing handlers
   const handleSlideChange = (index: number, field: keyof CarouselSlide, value: string) => {
     if (!carousel) return;
@@ -271,6 +303,7 @@ export default function CarouselGenerator({
       };
     });
   };
+
 
   const currentSlide = carousel?.slides[currentSlideIndex];
 
@@ -549,21 +582,58 @@ export default function CarouselGenerator({
                   )}
                   {language === 'kurdish' ? 'پاشەکەوت' : 'Save'}
                 </button>
-                <button
-                  type="button"
-                  onClick={handleExportCarousel}
-                  className="btn-secondary py-2 text-sm justify-center"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  {language === 'kurdish' ? 'دەرهێنان' : 'Export'}
-                </button>
+
+                <div className="col-span-3 sm:col-span-3 grid grid-cols-2 gap-3 mt-2">
+                  <button
+                    type="button"
+                    onClick={handleExportCarousel}
+                    className="btn-secondary py-2 text-sm justify-center"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    {language === 'kurdish' ? 'Markdown' : 'Markdown'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditorOpen(true)}
+                    className="btn-primary py-2 text-sm justify-center bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    </svg>
+                    Visual Editor & PDF
+                  </button>
+                </div>
+              </div>
+
+              {/* Hidden Export Templates */}
+              <div style={{ position: 'absolute', top: -10000, left: -10000, visibility: 'hidden' }}>
+                {carousel.slides.map((slide, index) => (
+                  <SlideExportTemplate
+                    key={index}
+                    slide={{
+                      ...slide,
+                      imageUrl: slideImages[slide.slideNumber]
+                    }}
+                    totalSlides={carousel.totalSlides}
+                    theme={carousel.imageTheme}
+                  />
+                ))}
               </div>
             </div>
           )}
         </div>
+
+        {/* Visual Editor Modal */}
+        {isEditorOpen && carousel && (
+          <CarouselEditor
+            carousel={carousel}
+            slideImages={slideImages}
+            onClose={() => setIsEditorOpen(false)}
+          />
+        )}
       </div>
-    </div>
+    </div >
   );
 }
