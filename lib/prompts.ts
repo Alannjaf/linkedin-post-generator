@@ -309,6 +309,7 @@ export async function buildCarouselPrompt(params: {
     - درێژی هەر سلایدێک: نزیکەی 125 پیت (ناوەڕۆک + سەردێڕ)
     - سەردێڕی سلاید: 30-50 پیت
     - ناوەڕۆکی سلاید: 80-120 پیت
+    - هەموو خاڵە سەرەکییەکانی ناوەڕۆکە ڕەسەنەکە بگرێتەوە. وردەکارییە گرنگەکان بەجێ مەهێڵە.
     
     پێویستیەکی زۆر گرنگ بۆ وێنەکان:
     - هەموو وێنەکان دەبێت هەمان تێم و براندینگ هەبێت
@@ -340,6 +341,7 @@ export async function buildCarouselPrompt(params: {
     - Each slide length: Approximately 125 characters (content + title)
     - Slide title: 30-50 characters
     - Slide content: 80-120 characters
+    - Cover ALL main points from the original content. Do not leave out important details.
     
     CRITICAL REQUIREMENT FOR IMAGES:
     - ALL images must share the SAME theme and branding

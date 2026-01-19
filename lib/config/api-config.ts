@@ -20,6 +20,6 @@ export const MAX_TOKENS = {
   default: undefined, // No limit
   cta: 500, // Short CTAs
   hook: 500, // Short opening lines
-  carousel: 2000, // Carousel generation needs more tokens
+  carousel: 4000, // Carousel generation needs more tokens
   adaptation: 2000, // Content adaptation
 } as const;
