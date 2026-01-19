@@ -4,10 +4,10 @@ import { deleteSavedTrendingPost, ensureSavedTrendingPostsTable } from '@/lib/db
 // DELETE /api/saved-posts/[id] - Delete a saved post by post_id
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id: postId } = params;
+    const { id: postId } = await params;
 
     if (!postId) {
       return NextResponse.json(

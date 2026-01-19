@@ -9,11 +9,12 @@ import { UpdateCustomToneRequest } from '@/types';
 // GET /api/custom-tones/[id] - Get a specific custom tone
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const id = parseInt(params.id, 10);
-    
+    const { id: idStr } = await params;
+    const id = parseInt(idStr, 10);
+
     if (isNaN(id)) {
       return NextResponse.json(
         { error: 'Invalid tone ID' },
@@ -22,7 +23,7 @@ export async function GET(
     }
 
     const tone = await getCustomTone(id);
-    
+
     if (!tone) {
       return NextResponse.json(
         { error: 'Custom tone not found' },
@@ -41,11 +42,12 @@ export async function GET(
 // PUT /api/custom-tones/[id] - Update a custom tone
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const id = parseInt(params.id, 10);
-    
+    const { id: idStr } = await params;
+    const id = parseInt(idStr, 10);
+
     if (isNaN(id)) {
       return NextResponse.json(
         { error: 'Invalid tone ID' },
@@ -82,11 +84,12 @@ export async function PUT(
 // DELETE /api/custom-tones/[id] - Delete a custom tone
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const id = parseInt(params.id, 10);
-    
+    const { id: idStr } = await params;
+    const id = parseInt(idStr, 10);
+
     if (isNaN(id)) {
       return NextResponse.json(
         { error: 'Invalid tone ID' },

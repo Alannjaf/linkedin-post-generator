@@ -297,4 +297,3 @@ export interface LinkedInAPIResponse {
   success?: boolean;
   message?: string;
 }
-

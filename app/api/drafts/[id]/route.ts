@@ -5,10 +5,10 @@ import { Draft } from '@/types';
 // GET /api/drafts/[id] - Get a single draft
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const { id } = await params;
 
     const result = await sql`
       SELECT 
@@ -44,10 +44,10 @@ export async function GET(
 // PUT /api/drafts/[id] - Update a draft
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const { id } = await params;
     const body = await request.json();
     const { title, content, language, tone, length, hashtags, generatedImage, imagePrompt, editedImagePrompt } = body;
 
@@ -115,10 +115,10 @@ export async function PUT(
 // DELETE /api/drafts/[id] - Delete a draft
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const { id } = await params;
 
     const result = await sql`
       DELETE FROM drafts
