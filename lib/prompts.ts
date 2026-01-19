@@ -343,10 +343,9 @@ export async function buildCarouselPrompt(params: {
     
     CRITICAL REQUIREMENT FOR IMAGES:
     - ALL images must share the SAME theme and branding
-    - Same visual style (e.g., minimalist, corporate, modern)
-    - Same color palette (specify consistent colors)
-    - Same design language (illustration style, photography style)
-    - Generate a master theme that applies to ALL slides
+    - Select a SPECIFIC art style (e.g., "3D Clay Render", "Flat Vector Art", "Cyberpunk Neon", "Minimalist Line Art"). AVOID generic terms like "Professional".
+    - Define a SPECIFIC color palette (e.g., "Pastel Blue & White", "Dark Mode with Neon Purple Accents").
+    - Generate a MASTER THEME description that describes this specific style and palette in detail.
     
     CRITICAL FORMATTING RULES:
     - START DIRECTLY with SLIDE 1.
@@ -361,6 +360,6 @@ export async function buildCarouselPrompt(params: {
     IMAGE: [image suggestion - ensure it matches the master theme]
     
     At the end, write:
-    MASTER IMAGE THEME: [description of the consistent visual theme]`;
+    MASTER IMAGE THEME: [The specific art style, color palette, and visual mood to be used for ALL images]`;
   }
 }

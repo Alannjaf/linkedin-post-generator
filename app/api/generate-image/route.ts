@@ -30,7 +30,7 @@ interface OpenRouterResponse {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { imagePrompt } = body;
+    const { imagePrompt, imageTheme, referenceImage } = body;
 
     if (!imagePrompt) {
       return NextResponse.json(
@@ -40,10 +40,31 @@ export async function POST(request: NextRequest) {
     }
 
     const apiKey = process.env.OPENROUTER_API_KEY;
-    
+
     if (!apiKey) {
       throw new Error('OpenRouter API key is not configured');
     }
+
+    // Construct the text content
+    const textPrompt = imageTheme
+      ? `Master Theme/Style: ${imageTheme}\n\nImage Specific Details: ${imagePrompt}\n\nRequirement: strictly follow the master theme for colors and style.${referenceImage ? ' Use the provided image as a strict reference for composition, lighting, and style.' : ''}`
+      : imagePrompt;
+
+    // Construct the message content (array if reference image exists, string otherwise)
+    const messageContent = referenceImage
+      ? [
+        {
+          type: 'text',
+          text: textPrompt
+        },
+        {
+          type: 'image_url',
+          image_url: {
+            url: referenceImage // Supports both http URLs and data URLs
+          }
+        }
+      ]
+      : textPrompt;
 
     // For image generation, we need to send a request that will generate an image
     // Note: OpenRouter's image generation might work differently - this is a standard approach
@@ -60,12 +81,12 @@ export async function POST(request: NextRequest) {
         messages: [
           {
             role: 'user',
-            content: imagePrompt,
+            content: messageContent,
           },
         ],
         modalities: ['image', 'text'],
         temperature: 0.7,
-        max_tokens: 4000, // Increased for image generation
+        max_tokens: 4000,
       }),
     });
 
