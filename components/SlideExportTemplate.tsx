@@ -1,6 +1,6 @@
 
 import React, { forwardRef } from 'react';
-import { GeneratedCarousel } from '@/types';
+import { GeneratedCarousel, Language } from '@/types';
 
 
 export interface SlideStyles {
@@ -26,11 +26,15 @@ interface SlideExportTemplateProps {
     theme?: string;
     userName?: string;
     userHandle?: string;
-    styles?: SlideStyles; // New prop for styling
+    styles?: SlideStyles;
+    language?: Language;
 }
 
 const SlideExportTemplate = forwardRef<HTMLDivElement, SlideExportTemplateProps>(
-    ({ slide, totalSlides, theme, userName, userHandle, styles }, ref) => {
+    ({ slide, totalSlides, theme, userName, userHandle, styles, language = 'english' }, ref) => {
+        // RTL support for Kurdish
+        const isRTL = language === 'kurdish';
+
         // Default styles if not provided
         const currentStyles: SlideStyles = styles || {
             fontFamily: 'Inter',
@@ -44,27 +48,24 @@ const SlideExportTemplate = forwardRef<HTMLDivElement, SlideExportTemplateProps>
             textPositionY: 0
         };
 
+        // Adjust alignment for RTL
         const alignmentClass = {
-            'start': 'justify-start items-start text-left pt-20 px-20',
+            'start': isRTL ? 'justify-start items-end text-right pt-20 px-20' : 'justify-start items-start text-left pt-20 px-20',
             'center': 'justify-center items-center text-center px-20',
-            'end': 'justify-end items-end text-right pb-20 px-20'
+            'end': isRTL ? 'justify-end items-start text-left pb-20 px-20' : 'justify-end items-end text-right pb-20 px-20'
         }[currentStyles.layout];
 
         return (
             <div
                 ref={ref}
                 id={`slide-export-${slide.slideNumber}`}
+                dir={isRTL ? 'rtl' : 'ltr'}
                 className={`relative overflow-hidden flex flex-col ${currentStyles.fontFamily === 'Serif' ? 'font-serif' : 'font-sans'}`}
                 style={{
                     width: '1080px',
                     height: '1350px', // 4:5 aspect ratio
-                    // padding: '80px', // Padding handled by alignment classes now for better control
                     backgroundColor: currentStyles.backgroundColor,
                     color: currentStyles.textColor,
-                    // fontFamily: currentStyles.fontFamily // Removing this to let className handle it, or we can keep it if we ensure it doesn't conflict. 
-                    // Actually, for custom fonts safely, let's keep inline style but rely on the prop match. 
-                    // But standard options use Inter vs Serif classes. 
-                    // Let's rely on the classNames from line 49 which already toggles serif/sans.
                 }}
             >
                 {/* Background Gradients - Dynamic Accent Color */}

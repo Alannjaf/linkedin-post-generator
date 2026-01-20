@@ -1,21 +1,26 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
-import { GeneratedCarousel, CarouselSlide } from '@/types';
+import { GeneratedCarousel, CarouselSlide, Language } from '@/types';
 import SlideExportTemplate, { SlideStyles } from './SlideExportTemplate';
 
 interface CarouselEditorProps {
     carousel: GeneratedCarousel;
     slideImages: Record<number, string>;
     onClose: () => void;
+    language?: Language;
 }
 
-export default function CarouselEditor({ carousel, slideImages, onClose }: CarouselEditorProps) {
+export default function CarouselEditor({ carousel, slideImages, onClose, language = 'english' }: CarouselEditorProps) {
     const [activeSlideIndex, setActiveSlideIndex] = useState(0);
     const [isExporting, setIsExporting] = useState(false);
     const [exportProgress, setExportProgress] = useState(0);
+    const [error, setError] = useState<string | null>(null);
+
+    // RTL support for Kurdish
+    const isRTL = language === 'kurdish';
 
     // Default Styles
     const [styles, setStyles] = useState<SlideStyles>({
@@ -32,10 +37,40 @@ export default function CarouselEditor({ carousel, slideImages, onClose }: Carou
 
     const exportContainerRef = useRef<HTMLDivElement>(null);
 
+
+    // Keyboard navigation for editor
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Don't trigger if user is typing in an input
+            if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+                return;
+            }
+
+            switch (e.key) {
+                case 'ArrowLeft':
+                    e.preventDefault();
+                    setActiveSlideIndex(prev => Math.max(0, prev - 1));
+                    break;
+                case 'ArrowRight':
+                    e.preventDefault();
+                    setActiveSlideIndex(prev => Math.min(carousel.slides.length - 1, prev + 1));
+                    break;
+                case 'Escape':
+                    e.preventDefault();
+                    onClose();
+                    break;
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [carousel.slides.length, onClose]);
+
     const handleExportPDF = async () => {
         if (!exportContainerRef.current) return;
         setIsExporting(true);
         setExportProgress(0);
+        setError(null);
 
         try {
             const pdf = new jsPDF('p', 'px', [1080, 1350]); // Match template dimensions
@@ -73,7 +108,7 @@ export default function CarouselEditor({ carousel, slideImages, onClose }: Carou
 
         } catch (error) {
             console.error('PDF Export failed:', error);
-            alert('Failed to export PDF. Please try again.');
+            setError('Failed to export PDF. Please try again.');
         } finally {
             setIsExporting(false);
             setExportProgress(0);
@@ -85,16 +120,28 @@ export default function CarouselEditor({ carousel, slideImages, onClose }: Carou
     return (
         <>
             {createPortal(
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 backdrop-blur-sm p-4 overflow-hidden">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 backdrop-blur-sm p-4 overflow-hidden" dir={isRTL ? 'rtl' : 'ltr'}>
                     <div className="w-full max-w-7xl h-full max-h-[90vh] grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_350px] gap-8">
 
                         {/* Main Preview Area */}
                         <div className="relative flex flex-col items-center justify-center h-full bg-zinc-900/50 rounded-3xl border border-white/10 overflow-hidden">
-                            <div className="absolute top-4 left-4 z-10 flex gap-2">
-                                <button onClick={onClose} className="px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 text-white text-sm transition-colors">
+                            <div className="absolute top-4 left-4 z-10 flex gap-2 items-center">
+                                <button onClick={onClose} className="px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 text-white text-sm transition-colors" title="Close (Esc)">
                                     Close
                                 </button>
+                                <span className="text-xs text-zinc-500">← → to navigate • Esc to close</span>
                             </div>
+
+                            {/* Error Banner */}
+                            {error && (
+                                <div className="absolute top-4 right-4 z-10 px-4 py-2 bg-red-500/20 border border-red-500/50 rounded-lg text-red-400 text-sm flex items-center gap-2">
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    {error}
+                                    <button onClick={() => setError(null)} className="ml-2 hover:text-red-300">×</button>
+                                </div>
+                            )}
 
                             {/* Preview Canvas */}
                             <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
@@ -114,6 +161,7 @@ export default function CarouselEditor({ carousel, slideImages, onClose }: Carou
                                             totalSlides={carousel.totalSlides}
                                             theme={carousel.imageTheme}
                                             styles={styles}
+                                            language={language}
                                         />
                                     </div>
                                 </div>
@@ -363,6 +411,7 @@ export default function CarouselEditor({ carousel, slideImages, onClose }: Carou
                                         totalSlides={carousel.totalSlides}
                                         theme={carousel.imageTheme}
                                         styles={styles}
+                                        language={language}
                                     />
                                 </div>
                             ))}

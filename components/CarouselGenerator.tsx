@@ -340,11 +340,133 @@ export default function CarouselGenerator({
     }, 100);
   };
 
+  const handleDeleteSlide = (index: number) => {
+    if (!carousel || carousel.slides.length <= 1) {
+      setError(language === 'kurdish' ? 'ناتوانیت تەنها سلایدەکە بسڕیتەوە' : 'Cannot delete the only slide');
+      return;
+    }
+
+    setCarousel(prev => {
+      if (!prev) return null;
+      const newSlides = prev.slides.filter((_, i) => i !== index);
+      // Renumber slides
+      const renumberedSlides = newSlides.map((slide, i) => ({
+        ...slide,
+        slideNumber: i + 1
+      }));
+      return {
+        ...prev,
+        slides: renumberedSlides,
+        totalSlides: renumberedSlides.length
+      };
+    });
+
+    // Adjust current index if needed
+    if (currentSlideIndex >= carousel.slides.length - 1) {
+      setCurrentSlideIndex(Math.max(0, currentSlideIndex - 1));
+    }
+
+    // Clean up any associated image
+    setSlideImages(prev => {
+      const newImages: Record<number, string> = {};
+      Object.entries(prev).forEach(([key, value]) => {
+        const slideNum = parseInt(key);
+        if (slideNum < index + 1) {
+          newImages[slideNum] = value;
+        } else if (slideNum > index + 1) {
+          newImages[slideNum - 1] = value;
+        }
+      });
+      return newImages;
+    });
+
+    setSuccessMessage(language === 'kurdish' ? 'سلاید سڕایەوە' : 'Slide deleted');
+    setTimeout(() => setSuccessMessage(null), 2000);
+  };
+
+  const handleDuplicateSlide = (index: number) => {
+    if (!carousel) return;
+
+    setCarousel(prev => {
+      if (!prev) return null;
+      const slideToDuplicate = prev.slides[index];
+      const newSlide: CarouselSlide = {
+        ...slideToDuplicate,
+        slideNumber: index + 2,
+        title: `${slideToDuplicate.title} (Copy)`,
+      };
+
+      const newSlides = [
+        ...prev.slides.slice(0, index + 1),
+        newSlide,
+        ...prev.slides.slice(index + 1)
+      ];
+
+      // Renumber slides after the duplicate
+      const renumberedSlides = newSlides.map((slide, i) => ({
+        ...slide,
+        slideNumber: i + 1
+      }));
+
+      return {
+        ...prev,
+        slides: renumberedSlides,
+        totalSlides: renumberedSlides.length
+      };
+    });
+
+    // Navigate to the duplicated slide
+    setTimeout(() => {
+      setCurrentSlideIndex(index + 1);
+    }, 100);
+
+    setSuccessMessage(language === 'kurdish' ? 'سلاید کۆپی کرا' : 'Slide duplicated');
+    setTimeout(() => setSuccessMessage(null), 2000);
+  };
+
+  // Keyboard navigation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!carousel || !isExpanded) return;
+
+      // Don't trigger if user is typing in an input/textarea
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      switch (e.key) {
+        case 'ArrowLeft':
+          e.preventDefault();
+          setCurrentSlideIndex(prev => Math.max(0, prev - 1));
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          setCurrentSlideIndex(prev => Math.min(carousel.slides.length - 1, prev + 1));
+          break;
+        case 'Delete':
+          e.preventDefault();
+          handleDeleteSlide(currentSlideIndex);
+          break;
+        case 'd':
+          if (e.ctrlKey || e.metaKey) {
+            e.preventDefault();
+            handleDuplicateSlide(currentSlideIndex);
+          }
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [carousel, isExpanded, currentSlideIndex, language]);
 
   const currentSlide = carousel?.slides[currentSlideIndex];
 
+  // RTL support for Kurdish (and Arabic if added in future)
+  const isRTL = language === 'kurdish';
+
   return (
-    <div className="glass-card overflow-hidden">
+    <div className="glass-card overflow-hidden" dir={isRTL ? 'rtl' : 'ltr'}>
       <button
         type="button"
         onClick={() => setIsExpanded(!isExpanded)}
@@ -429,27 +551,54 @@ export default function CarouselGenerator({
 
               {/* Slide Navigation */}
               <div className="flex items-center justify-between p-3 glass-card">
-                <button
-                  type="button"
-                  onClick={() => setCurrentSlideIndex(Math.max(0, currentSlideIndex - 1))}
-                  disabled={currentSlideIndex === 0}
-                  className="btn-secondary px-3 py-1.5 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {language === 'kurdish' ? 'پێشوو' : 'Previous'}
-                </button>
-                <span className="text-sm font-medium text-[var(--text-secondary)]">
-                  {language === 'kurdish'
-                    ? `سلاید ${currentSlideIndex + 1} لە ${carousel.totalSlides}`
-                    : `Slide ${currentSlideIndex + 1} of ${carousel.totalSlides}`}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setCurrentSlideIndex(Math.min(carousel.slides.length - 1, currentSlideIndex + 1))}
-                  disabled={currentSlideIndex === carousel.slides.length - 1}
-                  className="btn-secondary px-3 py-1.5 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {language === 'kurdish' ? 'دواتر' : 'Next'}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentSlideIndex(Math.max(0, currentSlideIndex - 1))}
+                    disabled={currentSlideIndex === 0}
+                    className="btn-secondary px-3 py-1.5 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                    title={language === 'kurdish' ? 'پێشوو (←)' : 'Previous (←)'}
+                  >
+                    {language === 'kurdish' ? 'پێشوو' : 'Previous'}
+                  </button>
+                  <span className="text-sm font-medium text-[var(--text-secondary)]">
+                    {language === 'kurdish'
+                      ? `سلاید ${currentSlideIndex + 1} لە ${carousel.totalSlides}`
+                      : `Slide ${currentSlideIndex + 1} of ${carousel.totalSlides}`}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentSlideIndex(Math.min(carousel.slides.length - 1, currentSlideIndex + 1))}
+                    disabled={currentSlideIndex === carousel.slides.length - 1}
+                    className="btn-secondary px-3 py-1.5 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                    title={language === 'kurdish' ? 'دواتر (→)' : 'Next (→)'}
+                  >
+                    {language === 'kurdish' ? 'دواتر' : 'Next'}
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleDuplicateSlide(currentSlideIndex)}
+                    className="p-1.5 rounded-lg bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 transition-colors"
+                    title={language === 'kurdish' ? 'کۆپی کردنی سلاید (Ctrl+D)' : 'Duplicate slide (Ctrl+D)'}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteSlide(currentSlideIndex)}
+                    disabled={carousel.slides.length <= 1}
+                    className="p-1.5 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    title={language === 'kurdish' ? 'سڕینەوەی سلاید (Delete)' : 'Delete slide (Delete)'}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                </div>
               </div>
 
               {/* Current Slide Display */}
@@ -545,38 +694,103 @@ export default function CarouselGenerator({
                 </div>
               )}
 
-              {/* All Slides Overview */}
+              {/* Visual Slide Thumbnail Strip */}
               <div className="mt-4">
-                <h4 className="text-sm font-semibold text-[var(--text-primary)] mb-2">
-                  {language === 'kurdish' ? 'پێداچوونەوەی هەموو سلایدەکان:' : 'All Slides Overview:'}
-                </h4>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-sm font-semibold text-[var(--text-primary)]">
+                    {language === 'kurdish' ? 'پێداچوونەوەی هەموو سلایدەکان:' : 'All Slides Overview:'}
+                  </h4>
+                  <span className="text-xs text-[var(--text-muted)] hidden sm:block">
+                    ← → {language === 'kurdish' ? 'گەڕان' : 'Navigate'} • Delete {language === 'kurdish' ? 'سڕینەوە' : 'Remove'} • Ctrl+D {language === 'kurdish' ? 'کۆپی' : 'Duplicate'}
+                  </span>
+                </div>
+
+                {/* Horizontal Scrollable Thumbnail Strip */}
+                <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-purple-500/50 scrollbar-track-transparent">
                   {carousel.slides.map((slide, index) => (
-                    <button
+                    <div
                       key={index}
-                      type="button"
+                      role="button"
+                      tabIndex={0}
                       onClick={() => setCurrentSlideIndex(index)}
-                      className={`p-2 text-xs rounded-lg border transition-colors relative ${currentSlideIndex === index
-                        ? 'bg-purple-500/20 border-purple-500/50 text-purple-300'
-                        : 'bg-[var(--bg-input)] border-[var(--border-default)] text-[var(--text-secondary)] hover:bg-[var(--bg-card-hover)]'
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setCurrentSlideIndex(index); } }}
+                      className={`relative flex-shrink-0 w-28 rounded-xl border-2 transition-all duration-200 overflow-hidden group cursor-pointer ${currentSlideIndex === index
+                        ? 'border-purple-500 ring-2 ring-purple-500/30 scale-105'
+                        : 'border-[var(--border-default)] hover:border-purple-500/50 hover:scale-102'
                         }`}
                     >
-                      <div className="font-medium">#{slide.slideNumber}</div>
-                      <div className="text-xs text-[var(--text-muted)] truncate mt-1">{slide.title}</div>
-                      {slideImages[slide.slideNumber] && (
-                        <span className="absolute -top-1 -right-1 w-2 h-2 bg-green-400 rounded-full"></span>
-                      )}
-                    </button>
+                      {/* Thumbnail Image or Placeholder */}
+                      <div className="aspect-[4/5] bg-gradient-to-br from-[var(--bg-tertiary)] to-[var(--bg-card)] relative">
+                        {slideImages[slide.slideNumber] ? (
+                          <img
+                            src={slideImages[slide.slideNumber]}
+                            alt={`Slide ${slide.slideNumber}`}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <span className="text-2xl font-bold text-[var(--text-muted)]">{slide.slideNumber}</span>
+                          </div>
+                        )}
+
+                        {/* Overlay with title */}
+                        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-2">
+                          <p className="text-[10px] text-white font-medium truncate">{slide.title}</p>
+                        </div>
+
+                        {/* Current indicator */}
+                        {currentSlideIndex === index && (
+                          <div className="absolute top-1 right-1 w-2 h-2 bg-purple-500 rounded-full animate-pulse" />
+                        )}
+
+                        {/* Image indicator */}
+                        {slideImages[slide.slideNumber] && (
+                          <div className="absolute top-1 left-1 w-4 h-4 bg-green-500/80 rounded-full flex items-center justify-center">
+                            <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                            </svg>
+                          </div>
+                        )}
+
+                        {/* Hover actions */}
+                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); handleDuplicateSlide(index); }}
+                            className="p-1.5 rounded-full bg-blue-500/80 text-white hover:bg-blue-500 transition-colors"
+                            title="Duplicate"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                          </button>
+                          {carousel.slides.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); handleDeleteSlide(index); }}
+                              className="p-1.5 rounded-full bg-red-500/80 text-white hover:bg-red-500 transition-colors"
+                              title="Delete"
+                            >
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   ))}
+
+                  {/* Add Slide Button */}
                   <button
                     type="button"
                     onClick={handleAddSlide}
-                    className="p-2 text-xs rounded-lg border border-dashed border-[var(--border-default)] text-[var(--text-secondary)] hover:bg-[var(--bg-card-hover)] hover:border-purple-500 hover:text-purple-400 transition-all flex flex-col items-center justify-center gap-1 min-h-[60px]"
+                    className="flex-shrink-0 w-28 aspect-[4/5] rounded-xl border-2 border-dashed border-[var(--border-default)] text-[var(--text-muted)] hover:border-purple-500 hover:text-purple-400 hover:bg-purple-500/10 transition-all flex flex-col items-center justify-center gap-2"
                   >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                     </svg>
-                    {language === 'kurdish' ? 'زیادکردن' : 'Add Slide'}
+                    <span className="text-xs font-medium">{language === 'kurdish' ? 'زیادکردن' : 'Add'}</span>
                   </button>
                 </div>
               </div>
@@ -647,6 +861,7 @@ export default function CarouselGenerator({
                     }}
                     totalSlides={carousel.totalSlides}
                     theme={carousel.imageTheme}
+                    language={language}
                   />
                 ))}
               </div>
@@ -660,6 +875,7 @@ export default function CarouselGenerator({
             carousel={carousel}
             slideImages={slideImages}
             onClose={() => setIsEditorOpen(false)}
+            language={language}
           />
         )}
       </div>
