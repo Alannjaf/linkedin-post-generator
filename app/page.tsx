@@ -13,6 +13,7 @@ import PostContentSection from '@/components/PostContentSection';
 import EnhancementSection from '@/components/EnhancementSection';
 import ExportSection from '@/components/ExportSection';
 import PreviewStats from '@/components/PreviewStats';
+import ThemeToggle from '@/components/ThemeToggle';
 import { saveDraft, getAllDrafts } from '@/lib/storage';
 import { savePost, getAllSavedPosts, deleteSavedPost } from '@/lib/saved-posts';
 import { convertHtmlToLinkedInFormat, htmlToPlainText, plainTextToHtml } from '@/lib/linkedin-formatter';
@@ -219,16 +220,19 @@ export default function Home() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
         {/* Header with gradient text */}
         <header className="mb-10 sm:mb-14">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center shadow-lg shadow-purple-500/25">
-              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center shadow-lg shadow-purple-500/25">
+                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </div>
+              <h1 className="text-4xl sm:text-5xl font-bold tracking-tight">
+                <span className="gradient-text">LinkedIn Post</span>{' '}
+                <span className="text-[var(--text-primary)]">Generator</span>
+              </h1>
             </div>
-            <h1 className="text-4xl sm:text-5xl font-bold tracking-tight">
-              <span className="gradient-text">LinkedIn Post</span>{' '}
-              <span className="text-[var(--text-primary)]">Generator</span>
-            </h1>
+            <ThemeToggle />
           </div>
           <p className="text-lg text-[var(--text-secondary)] max-w-2xl mb-8">
             Create engaging, professional LinkedIn posts powered by AI. Transform your ideas into compelling content.
