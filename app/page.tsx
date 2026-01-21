@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import DraftManager from '@/components/DraftManager';
 import TrendingPostsPanel from '@/components/TrendingPostsPanel';
 import SavedPostsPanel from '@/components/SavedPostsPanel';
@@ -30,11 +30,15 @@ export default function Home() {
   const [inspirationContext, setInspirationContext] = useState<string>('');
   const [useUnicodeFormatting, setUseUnicodeFormatting] = useState<boolean>(true);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [isStreaming, setIsStreaming] = useState(false);
 
   // Custom hooks for state management
   const postState = usePostState();
   const imageGeneration = useImageGeneration();
   const draftsAndSaved = useDraftsAndSaved();
+
+  // Reference to track streaming state
+  const streamingContentRef = useRef<string>('');
 
   // Initialize saved posts and drafts (handled in hooks)
 
@@ -54,11 +58,22 @@ export default function Home() {
   }, [error]);
 
   const handlePostGenerated = useCallback((content: string, generatedHashtags: string[], language: Language, tone: Tone, length: PostLength, context: string) => {
+    setIsStreaming(false);
+    streamingContentRef.current = '';
     postState.handlePostGenerated(content, generatedHashtags, language, tone, length, context);
     setInspirationContext(''); // Clear inspiration context after generating
     imageGeneration.clearImageState();
     setError(null);
   }, [postState, imageGeneration]);
+
+  // Handle streaming updates - show content as it's being generated
+  const handleStreamingUpdate = useCallback((content: string) => {
+    setIsStreaming(true);
+    streamingContentRef.current = content;
+    // Convert plain text to HTML for display in the editor
+    const htmlContent = plainTextToHtml(content);
+    postState.setPostContent(htmlContent);
+  }, [postState]);
 
   const handleError = useCallback((errorMessage: string) => {
     setError(errorMessage);
@@ -288,6 +303,7 @@ export default function Home() {
           originalContext={postState.originalContext}
           currentDraftId={postState.currentDraftId}
           onDraftIdUpdate={postState.setCurrentDraftId}
+          onStreamingUpdate={handleStreamingUpdate}
         />
 
         {/* Enhance & Export Sections */}

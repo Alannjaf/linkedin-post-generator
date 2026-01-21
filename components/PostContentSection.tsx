@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import PostGenerator from '@/components/PostGenerator';
 import PostEditor from '@/components/PostEditor';
 import HashtagSuggestions from '@/components/HashtagSuggestions';
@@ -31,6 +32,7 @@ interface PostContentSectionProps {
   originalContext: string;
   currentDraftId: string | null;
   onDraftIdUpdate: (id: string | null) => void;
+  onStreamingUpdate?: (content: string) => void;
 }
 
 export default function PostContentSection({
@@ -56,7 +58,27 @@ export default function PostContentSection({
   originalContext,
   currentDraftId,
   onDraftIdUpdate,
+  onStreamingUpdate,
 }: PostContentSectionProps) {
+  const [isStreaming, setIsStreaming] = useState(false);
+
+  const handleStreamingUpdate = (content: string) => {
+    setIsStreaming(true);
+    onStreamingUpdate?.(content);
+  };
+
+  const handlePostGeneratedWrapper = (
+    content: string,
+    generatedHashtags: string[],
+    language: Language,
+    tone: Tone,
+    length: PostLength,
+    context: string
+  ) => {
+    setIsStreaming(false);
+    onPostGenerated(content, generatedHashtags, language, tone, length, context);
+  };
+
   const handleSaveDraft = async () => {
     if (!postContent.trim()) {
       onToast('No content to save', 'error');
@@ -117,9 +139,13 @@ export default function PostContentSection({
               Generate Post
             </h2>
             <PostGenerator
-              onPostGenerated={onPostGenerated}
-              onError={onError}
+              onPostGenerated={handlePostGeneratedWrapper}
+              onError={(error) => {
+                setIsStreaming(false);
+                onError(error);
+              }}
               initialContext={inspirationContext}
+              onStreamingUpdate={handleStreamingUpdate}
             />
           </div>
 
@@ -141,12 +167,29 @@ export default function PostContentSection({
           <div className="glass-card gradient-border p-6 sm:p-8">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold text-[var(--text-primary)] flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-blue-500/25">
-                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-lg ${
+                  isStreaming 
+                    ? 'bg-gradient-to-br from-purple-500 to-pink-500 animate-pulse shadow-purple-500/25' 
+                    : 'bg-gradient-to-br from-blue-500 to-cyan-500 shadow-blue-500/25'
+                }`}>
+                  {isStreaming ? (
+                    <svg className="w-5 h-5 text-white animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  )}
                 </div>
-                Generated Post
+                <span className="flex items-center gap-2">
+                  Generated Post
+                  {isStreaming && (
+                    <span className="text-sm font-normal text-purple-400 animate-pulse">
+                      Writing...
+                    </span>
+                  )}
+                </span>
               </h2>
               <div className="flex gap-2">
                 <button

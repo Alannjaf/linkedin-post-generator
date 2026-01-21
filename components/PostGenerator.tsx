@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Language, Tone, PostLength, BuiltInTone } from '@/types';
-import { generatePost } from '@/lib/openrouter';
+import { generatePost, generatePostStreaming } from '@/lib/openrouter';
 import { useVoiceInput } from '@/lib/useVoiceInput';
 import CustomToneManager from './CustomToneManager';
 import ToneMixer from './ToneMixer';
@@ -12,6 +12,7 @@ interface PostGeneratorProps {
   onPostGenerated: (content: string, hashtags: string[], language: Language, tone: Tone, length: PostLength, context: string) => void;
   onError: (error: string) => void;
   initialContext?: string;
+  onStreamingUpdate?: (content: string) => void;
 }
 
 type ToneTab = 'built-in' | 'custom' | 'mix' | 'industry';
@@ -25,7 +26,7 @@ const BUILT_IN_TONES: { value: BuiltInTone; label: string }[] = [
   { value: 'comedy', label: 'Comedy' },
 ];
 
-export default function PostGenerator({ onPostGenerated, onError, initialContext }: PostGeneratorProps) {
+export default function PostGenerator({ onPostGenerated, onError, initialContext, onStreamingUpdate }: PostGeneratorProps) {
   const [context, setContext] = useState('');
 
   useEffect(() => {
@@ -38,8 +39,11 @@ export default function PostGenerator({ onPostGenerated, onError, initialContext
   const [tone, setTone] = useState<Tone>('professional');
   const [length, setLength] = useState<PostLength>('medium');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [streamProgress, setStreamProgress] = useState(0);
   const [toneTab, setToneTab] = useState<ToneTab>('built-in');
   const [showToneSelector, setShowToneSelector] = useState(false);
+  const [useStreaming, setUseStreaming] = useState(true); // Default to streaming enabled
 
   const {
     transcript: voiceTranscript,
@@ -112,28 +116,70 @@ export default function PostGenerator({ onPostGenerated, onError, initialContext
     };
   }, [isListening, stopListening]);
 
-  const handleGenerate = async () => {
+  const handleGenerate = useCallback(async () => {
     if (!context.trim()) {
       onError('Please provide some context or draft idea');
       return;
     }
 
     setIsGenerating(true);
-    try {
-      const result = await generatePost({
-        context: context.trim(),
-        language,
-        tone,
-        length,
-      });
-      onPostGenerated(result.content, result.hashtags, language, tone, length, context.trim());
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to generate post';
-      onError(errorMessage);
-    } finally {
-      setIsGenerating(false);
+    setStreamProgress(0);
+
+    const params = {
+      context: context.trim(),
+      language,
+      tone,
+      length,
+    };
+
+    if (useStreaming) {
+      // Use streaming generation
+      setIsStreaming(true);
+      
+      try {
+        await generatePostStreaming(params, {
+          onChunk: (chunk, fullContent) => {
+            // Update progress based on content length (rough estimate)
+            const estimatedLength = length === 'short' ? 300 : length === 'medium' ? 800 : 1500;
+            const progress = Math.min(95, (fullContent.length / estimatedLength) * 100);
+            setStreamProgress(progress);
+            
+            // Send streaming update to parent
+            if (onStreamingUpdate) {
+              onStreamingUpdate(fullContent);
+            }
+          },
+          onComplete: (result) => {
+            setStreamProgress(100);
+            setIsStreaming(false);
+            setIsGenerating(false);
+            onPostGenerated(result.content, result.hashtags, language, tone, length, context.trim());
+          },
+          onError: (error) => {
+            setIsStreaming(false);
+            setIsGenerating(false);
+            onError(error.message);
+          },
+        });
+      } catch (error) {
+        setIsStreaming(false);
+        setIsGenerating(false);
+        const errorMessage = error instanceof Error ? error.message : 'Failed to generate post';
+        onError(errorMessage);
+      }
+    } else {
+      // Use non-streaming generation (fallback)
+      try {
+        const result = await generatePost(params);
+        onPostGenerated(result.content, result.hashtags, language, tone, length, context.trim());
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Failed to generate post';
+        onError(errorMessage);
+      } finally {
+        setIsGenerating(false);
+      }
     }
-  };
+  }, [context, language, tone, length, useStreaming, onError, onPostGenerated, onStreamingUpdate]);
 
   const handleVoiceToggle = () => {
     if (isListening) {
@@ -356,30 +402,74 @@ export default function PostGenerator({ onPostGenerated, onError, initialContext
         </div>
       </div>
 
-      {/* Generate Button */}
-      <button
-        type="button"
-        onClick={handleGenerate}
-        disabled={isGenerating || !context.trim()}
-        className="w-full btn-primary py-4 text-lg"
-      >
-        {isGenerating ? (
-          <>
-            <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            Generating...
-          </>
-        ) : (
-          <>
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      {/* Streaming Toggle */}
+      <div className="flex items-center justify-between">
+        <label className="flex items-center gap-2 text-sm text-[var(--text-secondary)] cursor-pointer">
+          <input
+            type="checkbox"
+            checked={useStreaming}
+            onChange={(e) => setUseStreaming(e.target.checked)}
+            className="w-4 h-4 rounded border-[var(--border-default)] bg-[var(--bg-card)] text-purple-500 focus:ring-purple-500 focus:ring-offset-0"
+          />
+          <span className="flex items-center gap-1.5">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
-            Generate Post
-          </>
-        )}
-      </button>
+            Real-time streaming
+          </span>
+        </label>
+        <span className="text-xs text-[var(--text-muted)]">
+          {useStreaming ? 'See text as it generates' : 'Wait for complete response'}
+        </span>
+      </div>
+
+      {/* Generate Button */}
+      <div className="relative">
+        <button
+          type="button"
+          onClick={handleGenerate}
+          disabled={isGenerating || !context.trim()}
+          className="w-full btn-primary py-4 text-lg relative overflow-hidden"
+        >
+          {/* Progress bar for streaming */}
+          {isStreaming && streamProgress > 0 && (
+            <div
+              className="absolute inset-0 bg-white/10 transition-all duration-300 ease-out"
+              style={{ width: `${streamProgress}%` }}
+            />
+          )}
+          
+          <span className="relative flex items-center justify-center gap-2">
+            {isGenerating ? (
+              <>
+                {isStreaming ? (
+                  <>
+                    <svg className="w-5 h-5 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    <span>Generating... {streamProgress > 0 ? `${Math.round(streamProgress)}%` : ''}</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span>Generating...</span>
+                  </>
+                )}
+              </>
+            ) : (
+              <>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                <span>Generate Post</span>
+              </>
+            )}
+          </span>
+        </button>
+      </div>
     </div>
   );
 }

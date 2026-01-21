@@ -24,11 +24,27 @@ export interface OpenRouterResponse {
   };
 }
 
+export interface OpenRouterStreamChunk {
+  choices: Array<{
+    delta: {
+      content?: string;
+    };
+    finish_reason?: string | null;
+  }>;
+  error?: {
+    message: string;
+  };
+}
+
 interface CallOpenRouterOptions {
   messages: OpenRouterMessage[];
   useFallback?: boolean;
   maxTokens?: number;
   temperature?: number;
+}
+
+interface CallOpenRouterStreamOptions extends CallOpenRouterOptions {
+  onChunk?: (chunk: string) => void;
 }
 
 /**
@@ -234,5 +250,218 @@ export async function callOpenRouterForAdaptation(messages: OpenRouterMessage[])
   return callOpenRouter({ 
     messages, 
     maxTokens: MAX_TOKENS.adaptation 
+  });
+}
+
+/**
+ * Call OpenRouter API with streaming support
+ * Returns a ReadableStream that yields text chunks as they arrive
+ */
+export async function callOpenRouterStream({
+  messages,
+  useFallback = false,
+  maxTokens,
+  temperature = DEFAULT_TEMPERATURE,
+}: CallOpenRouterOptions): Promise<ReadableStream<Uint8Array>> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("OpenRouter API key is not configured");
+  }
+
+  const modelToUse = useFallback ? FALLBACK_MODEL : DEFAULT_MODEL;
+  logger.log(`[Streaming] Using model: ${modelToUse}`);
+
+  const response = await fetchWithTimeout(OPENROUTER_API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+      "HTTP-Referer":
+        process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+      "X-Title": "LinkedIn Post Generator",
+    },
+    body: JSON.stringify({
+      model: modelToUse,
+      messages,
+      temperature,
+      stream: true, // Enable streaming
+      ...(maxTokens && { max_tokens: maxTokens }),
+    }),
+  }, OPENROUTER_TIMEOUT * 2); // Longer timeout for streaming
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    const errorMessage = errorData.error?.message || errorData.message || `API error: ${response.statusText}`;
+    logger.error("[Streaming] OpenRouter API error response:", {
+      status: response.status,
+      statusText: response.statusText,
+      errorData,
+    });
+    throw new Error(errorMessage);
+  }
+
+  if (!response.body) {
+    throw new Error("No response body received from streaming API");
+  }
+
+  return response.body;
+}
+
+/**
+ * Parse Server-Sent Events (SSE) stream from OpenRouter
+ * Yields content chunks as they arrive
+ */
+export async function* parseSSEStream(
+  stream: ReadableStream<Uint8Array>
+): AsyncGenerator<string, void, unknown> {
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      
+      if (done) {
+        break;
+      }
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      
+      // Keep the last incomplete line in the buffer
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        const trimmedLine = line.trim();
+        
+        if (!trimmedLine || trimmedLine === '') {
+          continue;
+        }
+
+        if (trimmedLine.startsWith('data: ')) {
+          const data = trimmedLine.slice(6);
+          
+          // Check for stream end
+          if (data === '[DONE]') {
+            return;
+          }
+
+          try {
+            const parsed: OpenRouterStreamChunk = JSON.parse(data);
+            
+            if (parsed.error) {
+              throw new Error(parsed.error.message || 'Stream error');
+            }
+
+            const content = parsed.choices?.[0]?.delta?.content;
+            if (content) {
+              yield content;
+            }
+
+            // Check if stream is complete
+            if (parsed.choices?.[0]?.finish_reason) {
+              return;
+            }
+          } catch (parseError) {
+            // Skip malformed JSON chunks (can happen with partial data)
+            logger.debug('[Streaming] Skipping malformed chunk:', data);
+          }
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+/**
+ * Create a TransformStream that converts SSE data to text chunks
+ * For use in API route streaming responses
+ * 
+ * Note: The streaming route now uses a direct ReadableStream approach instead,
+ * but this is kept for potential future use.
+ */
+export function createSSETransformStream(): TransformStream<Uint8Array, Uint8Array> {
+  const decoder = new TextDecoder();
+  const encoder = new TextEncoder();
+  let buffer = '';
+  let streamEnded = false;
+
+  return new TransformStream({
+    transform(chunk, controller) {
+      if (streamEnded) return;
+      
+      buffer += decoder.decode(chunk, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (streamEnded) break;
+        
+        const trimmedLine = line.trim();
+        
+        if (!trimmedLine || trimmedLine === '') {
+          continue;
+        }
+
+        if (trimmedLine.startsWith('data: ')) {
+          const data = trimmedLine.slice(6);
+          
+          if (data === '[DONE]') {
+            // Send end signal and mark stream as ended
+            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+            streamEnded = true;
+            break; // Use break instead of return to allow flush to run
+          }
+
+          try {
+            const parsed: OpenRouterStreamChunk = JSON.parse(data);
+            const content = parsed.choices?.[0]?.delta?.content;
+            
+            if (content) {
+              // Forward the content as SSE
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content })}\n\n`));
+            }
+
+            if (parsed.choices?.[0]?.finish_reason) {
+              controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+              streamEnded = true;
+              break;
+            }
+          } catch {
+            // Skip malformed chunks
+          }
+        }
+      }
+    },
+    flush(controller) {
+      if (streamEnded) return;
+      
+      // Handle any remaining buffer content
+      if (buffer.trim()) {
+        const trimmedLine = buffer.trim();
+        if (trimmedLine.startsWith('data: ')) {
+          const data = trimmedLine.slice(6);
+          if (data !== '[DONE]') {
+            try {
+              const parsed: OpenRouterStreamChunk = JSON.parse(data);
+              const content = parsed.choices?.[0]?.delta?.content;
+              if (content) {
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content })}\n\n`));
+              }
+            } catch {
+              // Skip malformed chunks
+            }
+          }
+        }
+      }
+      
+      // Always send [DONE] at the end if not already sent
+      if (!streamEnded) {
+        controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+      }
+    }
   });
 }
