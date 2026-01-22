@@ -1,4 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { fetchWithTimeout } from '@/lib/api/openrouter-client';
+import { OPENROUTER_TIMEOUT } from '@/lib/config/api-config';
+import { logger } from '@/lib/utils/logger';
+import { shouldIncludeReferenceImage, validateImageSize } from '@/lib/utils/image-optimizer';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const IMAGE_MODEL = 'google/gemini-3-pro-image-preview';
@@ -45,13 +49,29 @@ export async function POST(request: NextRequest) {
       throw new Error('OpenRouter API key is not configured');
     }
 
+    // Validate and optimize reference image if provided
+    let optimizedReferenceImage: string | null = null;
+    if (referenceImage) {
+      const validation = validateImageSize(referenceImage, 1.5);
+      if (validation.isValid && shouldIncludeReferenceImage(referenceImage)) {
+        optimizedReferenceImage = referenceImage;
+        logger.log(`Reference image size: ${validation.sizeMB}MB`);
+      } else {
+        logger.warn(
+          `Reference image too large (${validation.sizeMB}MB) or invalid. ` +
+          `Skipping reference image to avoid API errors.`
+        );
+        // Continue without reference image rather than failing
+      }
+    }
+
     // Construct the text content
     const textPrompt = imageTheme
-      ? `Master Theme/Style: ${imageTheme}\n\nImage Specific Details: ${imagePrompt}\n\nRequirement: strictly follow the master theme for colors and style.${referenceImage ? ' Use the provided image as a strict reference for composition, lighting, and style.' : ''}`
+      ? `Master Theme/Style: ${imageTheme}\n\nImage Specific Details: ${imagePrompt}\n\nRequirement: strictly follow the master theme for colors and style.${optimizedReferenceImage ? ' Use the provided image as a strict reference for composition, lighting, and style.' : ''}`
       : imagePrompt;
 
     // Construct the message content (array if reference image exists, string otherwise)
-    const messageContent = referenceImage
+    const messageContent = optimizedReferenceImage
       ? [
         {
           type: 'text',
@@ -60,7 +80,7 @@ export async function POST(request: NextRequest) {
         {
           type: 'image_url',
           image_url: {
-            url: referenceImage // Supports both http URLs and data URLs
+            url: optimizedReferenceImage // Supports both http URLs and data URLs
           }
         }
       ]
@@ -68,7 +88,9 @@ export async function POST(request: NextRequest) {
 
     // For image generation, we need to send a request that will generate an image
     // Note: OpenRouter's image generation might work differently - this is a standard approach
-    const response = await fetch(OPENROUTER_API_URL, {
+    logger.log('Sending image generation request to OpenRouter API');
+    
+    const response = await fetchWithTimeout(OPENROUTER_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -88,19 +110,36 @@ export async function POST(request: NextRequest) {
         temperature: 0.7,
         max_tokens: 4000,
       }),
-    });
+    }, OPENROUTER_TIMEOUT);
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(
-        errorData.error?.message || `API error: ${response.statusText}`
-      );
+      
+      // Log detailed error information
+      logger.error('OpenRouter API error response:', {
+        status: response.status,
+        statusText: response.statusText,
+        errorData: errorData,
+        hasReferenceImage: !!optimizedReferenceImage,
+      });
+      
+      // Extract detailed error message
+      const errorMessage = errorData.error?.message || 
+                          errorData.message || 
+                          errorData.error ||
+                          `API error: ${response.statusText} (${response.status})`;
+      
+      throw new Error(errorMessage);
     }
 
     const data: OpenRouterResponse = await response.json();
 
     if (data.error) {
-      throw new Error(data.error.message);
+      logger.error('OpenRouter API returned error in response:', {
+        error: data.error,
+        fullResponse: JSON.stringify(data, null, 2),
+      });
+      throw new Error(data.error.message || 'Provider returned error');
     }
 
     // Check if response contains images in the expected format
@@ -138,11 +177,30 @@ export async function POST(request: NextRequest) {
       `Response structure: ${JSON.stringify(data, null, 2)}`
     );
   } catch (error) {
-    console.error('Error generating image:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to generate image';
+    logger.error('Error generating image:', error);
+    
+    // Extract detailed error message
+    let errorMessage = 'Failed to generate image';
+    let statusCode = 500;
+    
+    if (error instanceof Error) {
+      errorMessage = error.message;
+      
+      // Handle timeout errors specifically
+      if (error.message.includes('timed out') || error.message.includes('timeout')) {
+        statusCode = 504;
+        errorMessage = 'Image generation timed out. The request took too long. Please try again.';
+      }
+      
+      // Handle network errors
+      if (error.name === 'TypeError' && (error.message.includes('fetch') || error.message.includes('network'))) {
+        errorMessage = 'Connection error. Unable to reach the image generation service. Please check your connection and try again.';
+      }
+    }
+    
     return NextResponse.json(
       { error: errorMessage },
-      { status: 500 }
+      { status: statusCode }
     );
   }
 }
