@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Language, Tone, PostLength, BuiltInTone } from '@/types';
+import { Language, Tone, PostLength, BuiltInTone, GeneratedPost } from '@/types';
 import { generatePost, generatePostStreaming } from '@/lib/openrouter';
 import { useVoiceInput } from '@/lib/useVoiceInput';
 import CustomToneManager from './CustomToneManager';
@@ -9,7 +9,7 @@ import ToneMixer from './ToneMixer';
 import IndustryPresets from './IndustryPresets';
 
 interface PostGeneratorProps {
-  onPostGenerated: (content: string, hashtags: string[], language: Language, tone: Tone, length: PostLength, context: string) => void;
+  onPostGenerated: (content: string, hashtags: string[], language: Language, tone: Tone, length: PostLength, context: string, citations?: GeneratedPost['citations']) => void;
   onError: (error: string) => void;
   initialContext?: string;
   onStreamingUpdate?: (content: string) => void;
@@ -44,6 +44,7 @@ export default function PostGenerator({ onPostGenerated, onError, initialContext
   const [toneTab, setToneTab] = useState<ToneTab>('built-in');
   const [showToneSelector, setShowToneSelector] = useState(false);
   const [useStreaming, setUseStreaming] = useState(true); // Default to streaming enabled
+  const [enableWebSearch, setEnableWebSearch] = useState(false); // Web search toggle
 
   const {
     transcript: voiceTranscript,
@@ -130,6 +131,7 @@ export default function PostGenerator({ onPostGenerated, onError, initialContext
       language,
       tone,
       length,
+      enableWebSearch,
     };
 
     if (useStreaming) {
@@ -153,7 +155,7 @@ export default function PostGenerator({ onPostGenerated, onError, initialContext
             setStreamProgress(100);
             setIsStreaming(false);
             setIsGenerating(false);
-            onPostGenerated(result.content, result.hashtags, language, tone, length, context.trim());
+            onPostGenerated(result.content, result.hashtags, language, tone, length, context.trim(), result.citations);
           },
           onError: (error) => {
             setIsStreaming(false);
@@ -171,7 +173,7 @@ export default function PostGenerator({ onPostGenerated, onError, initialContext
       // Use non-streaming generation (fallback)
       try {
         const result = await generatePost(params);
-        onPostGenerated(result.content, result.hashtags, language, tone, length, context.trim());
+        onPostGenerated(result.content, result.hashtags, language, tone, length, context.trim(), result.citations);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Failed to generate post';
         onError(errorMessage);
@@ -179,7 +181,7 @@ export default function PostGenerator({ onPostGenerated, onError, initialContext
         setIsGenerating(false);
       }
     }
-  }, [context, language, tone, length, useStreaming, onError, onPostGenerated, onStreamingUpdate]);
+  }, [context, language, tone, length, useStreaming, enableWebSearch, onError, onPostGenerated, onStreamingUpdate]);
 
   const handleVoiceToggle = () => {
     if (isListening) {
@@ -420,6 +422,28 @@ export default function PostGenerator({ onPostGenerated, onError, initialContext
         </label>
         <span className="text-xs text-[var(--text-muted)]">
           {useStreaming ? 'See text as it generates' : 'Wait for complete response'}
+        </span>
+      </div>
+
+      {/* Web Search Toggle */}
+      <div className="flex items-center justify-between">
+        <label className="flex items-center gap-2 text-sm text-[var(--text-secondary)] cursor-pointer">
+          <input
+            type="checkbox"
+            checked={enableWebSearch}
+            onChange={(e) => setEnableWebSearch(e.target.checked)}
+            disabled={isGenerating}
+            className="w-4 h-4 rounded border-[var(--border-default)] bg-[var(--bg-card)] text-blue-500 focus:ring-blue-500 focus:ring-offset-0 disabled:opacity-50 disabled:cursor-not-allowed"
+          />
+          <span className="flex items-center gap-1.5">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            Web search
+          </span>
+        </label>
+        <span className="text-xs text-[var(--text-muted)]">
+          {enableWebSearch ? 'Searching internet for context' : 'Use provided context only'}
         </span>
       </div>
 

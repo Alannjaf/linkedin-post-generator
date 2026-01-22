@@ -57,7 +57,7 @@ export default function Home() {
     }
   }, [error]);
 
-  const handlePostGenerated = useCallback((content: string, generatedHashtags: string[], language: Language, tone: Tone, length: PostLength, context: string) => {
+  const handlePostGenerated = useCallback((content: string, generatedHashtags: string[], language: Language, tone: Tone, length: PostLength, context: string, citations?: any[]) => {
     setIsStreaming(false);
     streamingContentRef.current = '';
     postState.handlePostGenerated(content, generatedHashtags, language, tone, length, context);

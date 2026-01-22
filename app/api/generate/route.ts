@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PostGenerationParams, GeneratedPost, PostLength } from "@/types";
 import { buildPostPrompt, buildHashtagPrompt } from "@/lib/prompts";
-import { callOpenRouterSimple } from "@/lib/api/openrouter-client";
+import { callOpenRouterSimple, callOpenRouterWithWebSearch } from "@/lib/api/openrouter-client";
 import { cleanPostContent } from "@/lib/utils/content-cleaner";
 import { logger } from "@/lib/utils/logger";
 
@@ -15,7 +15,7 @@ const CHARACTER_TARGETS: Record<PostLength, number> = {
 export async function POST(request: NextRequest) {
   try {
     const body: PostGenerationParams = await request.json();
-    const { context, language, tone, length, trendingHashtags } = body;
+    const { context, language, tone, length, trendingHashtags, enableWebSearch } = body;
 
     if (!context || !language || !tone || !length) {
       return NextResponse.json(
@@ -24,7 +24,29 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const prompt = await buildPostPrompt({ context, language, tone, length });
+    let enrichedContext = context;
+    let webSearchCitations: GeneratedPost['citations'] = undefined;
+
+    // If web search is enabled, search for information about the context first
+    if (enableWebSearch) {
+      try {
+        logger.log("[Generate] Web search enabled, searching for context information...");
+        const webSearchResult = await callOpenRouterWithWebSearch({
+          context: `Search for current information about: ${context}. Provide relevant details and context.`,
+        });
+        
+        // Combine original context with web search results for richer context
+        enrichedContext = `${context}\n\nAdditional context from web search:\n${webSearchResult.content}`;
+        webSearchCitations = webSearchResult.citations;
+        logger.log(`[Generate] Web search completed, found ${webSearchResult.citations.length} citations`);
+      } catch (error) {
+        logger.warn("[Generate] Web search failed, falling back to standard generation:", error);
+        // Fallback to standard generation if web search fails
+        // Continue with original context
+      }
+    }
+
+    const prompt = await buildPostPrompt({ context: enrichedContext, language, tone, length });
     const content = await callOpenRouterSimple(
       [{ role: "user", content: prompt }]
     );
@@ -77,6 +99,7 @@ export async function POST(request: NextRequest) {
     const result: GeneratedPost = {
       content: cleanContent,
       hashtags: foundHashtags,
+      citations: webSearchCitations,
     };
 
     return NextResponse.json(result);

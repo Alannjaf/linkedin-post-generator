@@ -48,11 +48,20 @@ export interface PostGenerationParams {
   tone: Tone;
   length: PostLength;
   trendingHashtags?: string[]; // Optional trending hashtags from similar posts
+  enableWebSearch?: boolean; // Enable web search for real-time information
+}
+
+export interface WebSearchCitation {
+  url: string;
+  text: string;
+  startIndex: number;
+  endIndex: number;
 }
 
 export interface GeneratedPost {
   content: string;
   hashtags: string[];
+  citations?: WebSearchCitation[]; // Web search citations if web search was enabled
 }
 
 export interface TrendingPost {

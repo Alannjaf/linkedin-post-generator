@@ -1,12 +1,15 @@
 import { 
-  OPENROUTER_API_URL, 
+  OPENROUTER_API_URL,
+  OPENROUTER_RESPONSES_API_URL,
   DEFAULT_MODEL, 
   FALLBACK_MODEL, 
   OPENROUTER_TIMEOUT,
   DEFAULT_TEMPERATURE,
-  MAX_TOKENS
+  MAX_TOKENS,
+  WEB_SEARCH_MAX_RESULTS
 } from '@/lib/config/api-config';
 import { logger } from '@/lib/utils/logger';
+import { WebSearchCitation } from '@/types';
 
 export interface OpenRouterMessage {
   role: "user" | "assistant" | "system";
@@ -34,6 +37,102 @@ export interface OpenRouterStreamChunk {
   error?: {
     message: string;
   };
+}
+
+// Responses API types for web search
+export interface ResponseInputText {
+  type: 'input_text';
+  text: string;
+}
+
+export interface ResponseMessage {
+  type: 'message';
+  role: 'user' | 'assistant' | 'system';
+  content: Array<ResponseInputText>;
+}
+
+export interface UrlCitation {
+  type: 'url_citation';
+  url: string;
+  start_index: number;
+  end_index: number;
+}
+
+export interface OutputText {
+  type: 'output_text';
+  text: string;
+  annotations?: UrlCitation[];
+}
+
+export interface ResponseOutputMessage {
+  type: 'message';
+  id?: string;
+  status?: string;
+  role: 'assistant';
+  content: OutputText[];
+}
+
+export interface ReasoningText {
+  type: 'reasoning_text';
+  text: string;
+}
+
+export interface ReasoningOutput {
+  type: 'reasoning';
+  id?: string;
+  summary?: any[];
+  content: ReasoningText[];
+  format?: string;
+}
+
+// Union type for different output types
+export type ResponseOutput = ResponseOutputMessage | ReasoningOutput | { type: string; [key: string]: any };
+
+export interface OpenRouterWebSearchResponse {
+  id: string;
+  object: 'response';
+  created_at: number;
+  model: string;
+  output_text?: string; // Root-level output text
+  output: ResponseOutput[];
+  usage?: {
+    input_tokens: number;
+    output_tokens: number;
+    total_tokens: number;
+  };
+  status: 'completed' | 'in_progress';
+  error?: {
+    message: string;
+  };
+  completed_at?: number;
+  incomplete_details?: any;
+  tools?: any[];
+  tool_choice?: any;
+  parallel_tool_calls?: boolean;
+  max_output_tokens?: number;
+  temperature?: number;
+  top_p?: number;
+  presence_penalty?: number;
+  frequency_penalty?: number;
+  top_logprobs?: number;
+  max_tool_calls?: number | null;
+  metadata?: any;
+  background?: boolean;
+  previous_response_id?: string | null;
+  service_tier?: string;
+  truncation?: string;
+  store?: boolean;
+  instructions?: string | null;
+  text?: any;
+  reasoning?: any;
+  safety_identifier?: any;
+  prompt_cache_key?: string | null;
+  user?: any;
+}
+
+export interface WebSearchResult {
+  content: string;
+  citations: WebSearchCitation[];
 }
 
 interface CallOpenRouterOptions {
@@ -464,4 +563,186 @@ export function createSSETransformStream(): TransformStream<Uint8Array, Uint8Arr
       }
     }
   });
+}
+
+/**
+ * Call OpenRouter Responses API with web search enabled
+ * Uses the Responses API Beta endpoint with web search plugin
+ */
+export async function callOpenRouterWithWebSearch({
+  context,
+  useFallback = false,
+  maxTokens,
+  temperature = DEFAULT_TEMPERATURE,
+  maxResults = WEB_SEARCH_MAX_RESULTS,
+}: {
+  context: string;
+  useFallback?: boolean;
+  maxTokens?: number;
+  temperature?: number;
+  maxResults?: number;
+}): Promise<WebSearchResult> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("OpenRouter API key is not configured");
+  }
+
+  const modelToUse = useFallback ? FALLBACK_MODEL : DEFAULT_MODEL;
+  logger.log(`[Web Search] Using model: ${modelToUse}`);
+
+  try {
+    const response = await fetchWithTimeout(OPENROUTER_RESPONSES_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+        "HTTP-Referer":
+          process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+        "X-Title": "LinkedIn Post Generator",
+      },
+      body: JSON.stringify({
+        model: modelToUse,
+        input: [
+          {
+            type: 'message',
+            role: 'user',
+            content: [
+              {
+                type: 'input_text',
+                text: context,
+              },
+            ],
+          },
+        ],
+        plugins: [{ id: 'web', max_results: maxResults }],
+        temperature,
+        max_output_tokens: maxTokens || 9000,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const errorMessage = errorData.error?.message || errorData.message || `API error: ${response.statusText}`;
+      logger.error("[Web Search] OpenRouter API error response:", {
+        status: response.status,
+        statusText: response.statusText,
+        errorData,
+      });
+      throw new Error(errorMessage);
+    }
+
+    const data: OpenRouterWebSearchResponse = await response.json();
+
+    logger.debug("[Web Search] OpenRouter API response structure:", JSON.stringify(data, null, 2));
+
+    if (data.error) {
+      logger.error("[Web Search] OpenRouter API error:", data.error);
+      throw new Error(data.error.message || "API returned an error");
+    }
+
+    // Check if response is still in progress
+    if (data.status === 'in_progress') {
+      logger.warn("[Web Search] Response is still in progress, waiting for completion...");
+      throw new Error("Response is still being processed. Please try again in a moment.");
+    }
+
+    let content = '';
+    let citations: WebSearchCitation[] = [];
+
+    // Priority 1: Check for root-level output_text
+    if (data.output_text && data.output_text.trim()) {
+      content = data.output_text.trim();
+      logger.log("[Web Search] Using root-level output_text");
+    } else if (data.output && data.output.length > 0) {
+      // Priority 2: Look for message type output
+      const messageOutput = data.output.find((o): o is ResponseOutputMessage => o.type === 'message');
+      if (messageOutput) {
+        const textContent = messageOutput.content?.find((c) => c.type === 'output_text');
+        if (textContent && textContent.text) {
+          content = textContent.text.trim();
+          logger.log("[Web Search] Using message output_text");
+          
+          // Extract citations from message annotations
+          if (textContent.annotations) {
+            for (const annotation of textContent.annotations) {
+              if (annotation.type === 'url_citation') {
+                const citedText = content.slice(annotation.start_index, annotation.end_index);
+                citations.push({
+                  url: annotation.url,
+                  text: citedText,
+                  startIndex: annotation.start_index,
+                  endIndex: annotation.end_index,
+                });
+              }
+            }
+          }
+        }
+      }
+      
+      // Priority 3: Look for reasoning type output if no message found
+      if (!content) {
+        const reasoningOutput = data.output.find((o): o is ReasoningOutput => o.type === 'reasoning');
+        if (reasoningOutput && reasoningOutput.content) {
+          // Extract text from all reasoning_text items
+          const reasoningTexts = reasoningOutput.content
+            .filter((c): c is ReasoningText => c.type === 'reasoning_text')
+            .map(c => c.text)
+            .join('\n');
+          
+          if (reasoningTexts.trim()) {
+            content = reasoningTexts.trim();
+            logger.log("[Web Search] Using reasoning output");
+          }
+        }
+      }
+      
+      // Priority 4: Try to extract text from any output type
+      if (!content) {
+        for (const outputItem of data.output) {
+          if (outputItem.type === 'message' && 'content' in outputItem) {
+            const msgContent = (outputItem as any).content;
+            if (Array.isArray(msgContent)) {
+              for (const item of msgContent) {
+                if (item.text && typeof item.text === 'string') {
+                  content = item.text.trim();
+                  if (content) {
+                    logger.log("[Web Search] Extracted text from message content");
+                    break;
+                  }
+                }
+              }
+            }
+          }
+          if (content) break;
+        }
+      }
+    }
+
+    if (!content) {
+      logger.error("[Web Search] No text content found in response. Full response:", JSON.stringify(data, null, 2));
+      throw new Error("No text content found in API response. The response format may be unexpected.");
+    }
+
+    logger.log(`[Web Search] Extracted content (${content.length} chars) and ${citations.length} citations`);
+
+    return {
+      content,
+      citations,
+    };
+  } catch (error) {
+    logger.error("[Web Search] callOpenRouterWithWebSearch error:", error);
+    if (error instanceof Error) {
+      // Check if it's a timeout error
+      if (error.message.includes('timed out') || error.message.includes('timeout')) {
+        throw error;
+      }
+      // Check if it's a network error
+      if (error.name === 'TypeError' && (error.message.includes('fetch') || error.message.includes('network'))) {
+        throw new Error('Connection error. Unable to reach the AI service. Please check your connection and try again.');
+      }
+      throw error;
+    }
+    throw new Error("Failed to call OpenRouter API with web search");
+  }
 }

@@ -122,6 +122,7 @@ export async function generatePostStreaming(
     let fullContent = '';
     let buffer = '';
     let chunkCount = 0;
+    let citations: GeneratedPost['citations'] = undefined;
 
     try {
       while (true) {
@@ -156,7 +157,7 @@ export async function generatePostStreaming(
           if (data === '[DONE]') {
             console.log('[Client Streaming] Received [DONE] signal');
             // Stream complete, process the final content
-            const result = processCompletedContent(fullContent, params.language);
+            const result = processCompletedContent(fullContent, params.language, citations);
             callbacks.onComplete(result);
             return;
           }
@@ -166,6 +167,10 @@ export async function generatePostStreaming(
             if (parsed.content) {
               fullContent += parsed.content;
               callbacks.onChunk(parsed.content, fullContent);
+            }
+            if (parsed.citations) {
+              citations = parsed.citations;
+              console.log('[Client Streaming] Received citations:', citations.length);
             }
             if (parsed.error) {
               console.error('[Client Streaming] Server error:', parsed.error);
@@ -183,7 +188,7 @@ export async function generatePostStreaming(
       // If we reach here without [DONE], still process what we have
       console.log('[Client Streaming] Processing remaining content, length:', fullContent.length);
       if (fullContent) {
-        const result = processCompletedContent(fullContent, params.language);
+        const result = processCompletedContent(fullContent, params.language, citations);
         callbacks.onComplete(result);
       } else {
         throw new Error('No content received from stream');
@@ -215,7 +220,7 @@ export async function generatePostStreaming(
 /**
  * Process completed streaming content to extract hashtags and clean up
  */
-function processCompletedContent(content: string, language: string): GeneratedPost {
+function processCompletedContent(content: string, language: string, citations?: GeneratedPost['citations']): GeneratedPost {
   // Clean up content: remove meta-commentary and asterisks
   let cleanedContent = cleanStreamContent(content, language);
 
@@ -233,6 +238,7 @@ function processCompletedContent(content: string, language: string): GeneratedPo
   return {
     content: finalContent,
     hashtags: foundHashtags,
+    citations,
   };
 }
 
@@ -339,7 +345,7 @@ export async function generatePostStreamingWithAbort(
           const data = trimmedLine.slice(6);
 
           if (data === '[DONE]') {
-            const result = processCompletedContent(fullContent, params.language);
+            const result = processCompletedContent(fullContent, params.language, undefined);
             callbacks.onComplete(result);
             return;
           }
@@ -357,7 +363,7 @@ export async function generatePostStreamingWithAbort(
       }
 
       if (fullContent) {
-        const result = processCompletedContent(fullContent, params.language);
+        const result = processCompletedContent(fullContent, params.language, undefined);
         callbacks.onComplete(result);
       } else {
         throw new Error('No content received from stream');

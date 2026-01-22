@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { PostGenerationParams, PostLength } from "@/types";
 import { buildPostPrompt } from "@/lib/prompts";
-import { callOpenRouterStream, type OpenRouterStreamChunk } from "@/lib/api/openrouter-client";
+import { callOpenRouterStream, callOpenRouterWithWebSearch, type OpenRouterStreamChunk } from "@/lib/api/openrouter-client";
 import { logger } from "@/lib/utils/logger";
 
 // Character count targets based on post length (used in prompts, not as hard limits)
@@ -18,7 +18,7 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: NextRequest) {
   try {
     const body: PostGenerationParams = await request.json();
-    const { context, language, tone, length, trendingHashtags } = body;
+    const { context, language, tone, length, trendingHashtags, enableWebSearch } = body;
 
     if (!context || !language || !tone || !length) {
       return new Response(
@@ -30,7 +30,29 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const prompt = await buildPostPrompt({ context, language, tone, length });
+    let enrichedContext = context;
+    let webSearchCitations: Array<{ url: string; text: string; startIndex: number; endIndex: number }> | undefined = undefined;
+
+    // If web search is enabled, search for information about the context first
+    if (enableWebSearch) {
+      try {
+        logger.log("[Stream API] Web search enabled, searching for context information...");
+        const webSearchResult = await callOpenRouterWithWebSearch({
+          context: `Search for current information about: ${context}. Provide relevant details and context.`,
+        });
+        
+        // Combine original context with web search results for richer context
+        enrichedContext = `${context}\n\nAdditional context from web search:\n${webSearchResult.content}`;
+        webSearchCitations = webSearchResult.citations;
+        logger.log(`[Stream API] Web search completed, found ${webSearchResult.citations.length} citations`);
+      } catch (error) {
+        logger.warn("[Stream API] Web search failed, falling back to standard generation:", error);
+        // Fallback to standard generation if web search fails
+        // Continue with original context
+      }
+    }
+
+    const prompt = await buildPostPrompt({ context: enrichedContext, language, tone, length });
     
     console.log('[Stream API] Starting streaming response for post generation');
 
@@ -76,6 +98,10 @@ export async function POST(request: NextRequest) {
             // Check for stream end
             if (data === '[DONE]') {
               console.log('[Stream API] Received [DONE] signal');
+              // Send citations if web search was enabled
+              if (webSearchCitations && webSearchCitations.length > 0) {
+                yield `data: ${JSON.stringify({ citations: webSearchCitations })}\n\n`;
+              }
               yield 'data: [DONE]\n\n';
               return;
             }
@@ -101,6 +127,10 @@ export async function POST(request: NextRequest) {
               // Check for finish reason
               if (parsed.choices?.[0]?.finish_reason) {
                 console.log('[Stream API] Finish reason:', parsed.choices[0].finish_reason);
+                // Send citations if web search was enabled
+                if (webSearchCitations && webSearchCitations.length > 0) {
+                  yield `data: ${JSON.stringify({ citations: webSearchCitations })}\n\n`;
+                }
                 yield 'data: [DONE]\n\n';
                 return;
               }
@@ -130,6 +160,10 @@ export async function POST(request: NextRequest) {
           }
         }
         
+        // Send citations if web search was enabled
+        if (webSearchCitations && webSearchCitations.length > 0) {
+          yield `data: ${JSON.stringify({ citations: webSearchCitations })}\n\n`;
+        }
         // Send final [DONE]
         yield 'data: [DONE]\n\n';
         

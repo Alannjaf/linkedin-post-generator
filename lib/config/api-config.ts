@@ -4,6 +4,7 @@
  */
 
 export const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
+export const OPENROUTER_RESPONSES_API_URL = "https://openrouter.ai/api/v1/responses";
 
 // Try gemini-3-pro-preview first, fallback to gemini-3-flash-preview if needed
 export const DEFAULT_MODEL = "google/gemini-3-pro-preview";
@@ -23,3 +24,6 @@ export const MAX_TOKENS = {
   carousel: 4000, // Carousel generation needs more tokens
   adaptation: 2000, // Content adaptation
 } as const;
+
+// Web search configuration
+export const WEB_SEARCH_MAX_RESULTS = 3; // Default number of search results to retrieve (1-10)

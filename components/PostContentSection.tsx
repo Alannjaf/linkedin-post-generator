@@ -4,7 +4,7 @@ import { useState } from 'react';
 import PostGenerator from '@/components/PostGenerator';
 import PostEditor from '@/components/PostEditor';
 import HashtagSuggestions from '@/components/HashtagSuggestions';
-import { Language, Tone, PostLength } from '@/types';
+import { Language, Tone, PostLength, WebSearchCitation } from '@/types';
 import { saveDraft, updateDraft, getAllDrafts } from '@/lib/storage';
 import { htmlToPlainText, plainTextToHtml } from '@/lib/linkedin-formatter';
 import { Draft } from '@/types';
@@ -17,7 +17,7 @@ interface PostContentSectionProps {
   currentTone: Tone;
   currentLength: PostLength;
   inspirationContext: string;
-  onPostGenerated: (content: string, generatedHashtags: string[], language: Language, tone: Tone, length: PostLength, context: string) => void;
+  onPostGenerated: (content: string, generatedHashtags: string[], language: Language, tone: Tone, length: PostLength, context: string, citations?: WebSearchCitation[]) => void;
   onPostContentChange: (content: string) => void;
   onHashtagAdd: (hashtag: string) => void;
   onHashtagRemove: (hashtag: string) => void;
@@ -61,6 +61,7 @@ export default function PostContentSection({
   onStreamingUpdate,
 }: PostContentSectionProps) {
   const [isStreaming, setIsStreaming] = useState(false);
+  const [citations, setCitations] = useState<WebSearchCitation[] | undefined>(undefined);
 
   const handleStreamingUpdate = (content: string) => {
     setIsStreaming(true);
@@ -73,10 +74,12 @@ export default function PostContentSection({
     language: Language,
     tone: Tone,
     length: PostLength,
-    context: string
+    context: string,
+    citations?: WebSearchCitation[]
   ) => {
     setIsStreaming(false);
-    onPostGenerated(content, generatedHashtags, language, tone, length, context);
+    setCitations(citations);
+    onPostGenerated(content, generatedHashtags, language, tone, length, context, citations);
   };
 
   const handleSaveDraft = async () => {
@@ -222,6 +225,50 @@ export default function PostContentSection({
               language={currentLanguage}
             />
           </div>
+
+          {/* Citations Section */}
+          {citations && citations.length > 0 && (
+            <div className="glass-card p-6 sm:p-8 animate-fade-in">
+              <div className="flex items-center gap-2 mb-4">
+                <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
+                <h3 className="text-lg font-semibold text-[var(--text-primary)]">
+                  Sources ({citations.length})
+                </h3>
+              </div>
+              <div className="space-y-2">
+                {citations.map((citation, index) => (
+                  <a
+                    key={index}
+                    href={citation.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block p-3 rounded-lg border border-[var(--border-default)] hover:border-blue-400 hover:bg-blue-500/10 transition-colors group"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="flex-shrink-0 w-6 h-6 rounded bg-blue-500/20 text-blue-400 flex items-center justify-center text-xs font-medium mt-0.5">
+                        {index + 1}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-[var(--text-secondary)] line-clamp-2 group-hover:text-blue-400 transition-colors">
+                          {citation.url}
+                        </p>
+                        {citation.text && (
+                          <p className="text-xs text-[var(--text-muted)] mt-1 line-clamp-1">
+                            "{citation.text}"
+                          </p>
+                        )}
+                      </div>
+                      <svg className="w-4 h-4 text-[var(--text-muted)] group-hover:text-blue-400 transition-colors flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                    </div>
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </>
