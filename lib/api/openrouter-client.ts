@@ -566,10 +566,10 @@ export function createSSETransformStream(): TransformStream<Uint8Array, Uint8Arr
 }
 
 /**
- * Call OpenRouter Responses API with web search enabled
- * Uses the Responses API Beta endpoint with web search plugin
+ * Call OpenRouter Responses API with web search enabled using streaming
+ * Uses streaming to receive response.output_item.added events when message output appears
  */
-export async function callOpenRouterWithWebSearch({
+async function callOpenRouterWithWebSearchStream({
   context,
   useFallback = false,
   maxTokens,
@@ -589,7 +589,7 @@ export async function callOpenRouterWithWebSearch({
   }
 
   const modelToUse = useFallback ? FALLBACK_MODEL : DEFAULT_MODEL;
-  logger.log(`[Web Search] Using model: ${modelToUse}`);
+  logger.log(`[Web Search Stream] Using model: ${modelToUse}`);
 
   try {
     const response = await fetchWithTimeout(OPENROUTER_RESPONSES_API_URL, {
@@ -616,15 +616,16 @@ export async function callOpenRouterWithWebSearch({
           },
         ],
         plugins: [{ id: 'web', max_results: maxResults }],
+        stream: true,
         temperature,
         max_output_tokens: maxTokens || 9000,
       }),
-    });
+    }, OPENROUTER_TIMEOUT * 2); // Longer timeout for streaming
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       const errorMessage = errorData.error?.message || errorData.message || `API error: ${response.statusText}`;
-      logger.error("[Web Search] OpenRouter API error response:", {
+      logger.error("[Web Search Stream] OpenRouter API error response:", {
         status: response.status,
         statusText: response.statusText,
         errorData,
@@ -632,23 +633,339 @@ export async function callOpenRouterWithWebSearch({
       throw new Error(errorMessage);
     }
 
-    const data: OpenRouterWebSearchResponse = await response.json();
-
-    logger.debug("[Web Search] OpenRouter API response structure:", JSON.stringify(data, null, 2));
-
-    if (data.error) {
-      logger.error("[Web Search] OpenRouter API error:", data.error);
-      throw new Error(data.error.message || "API returned an error");
+    if (!response.body) {
+      throw new Error("No response body received from streaming API");
     }
 
-    // Check if response is still in progress
-    if (data.status === 'in_progress') {
-      logger.warn("[Web Search] Response is still in progress, waiting for completion...");
-      throw new Error("Response is still being processed. Please try again in a moment.");
-    }
-
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
     let content = '';
     let citations: WebSearchCitation[] = [];
+    let messageFound = false;
+    const receivedEvents: string[] = [];
+    let completedEventLogged = false;
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) {
+          break;
+        }
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmedLine = line.trim();
+          
+          if (!trimmedLine || !trimmedLine.startsWith('data: ')) {
+            continue;
+          }
+
+          const data = trimmedLine.slice(6);
+          
+          if (data === '[DONE]') {
+            logger.log("[Web Search Stream] Stream completed");
+            break;
+          }
+
+          try {
+            const parsed = JSON.parse(data);
+            
+            // Log all event types for debugging
+            if (parsed.type) {
+              receivedEvents.push(parsed.type);
+              logger.debug(`[Web Search Stream] Received event: ${parsed.type}`);
+            }
+            
+            // Handle response.output_item.added event
+            if (parsed.type === 'response.output_item.added') {
+              logger.log(`[Web Search Stream] Output item added: ${parsed.item?.type || 'unknown'}`);
+              
+              if (parsed.item?.type === 'message') {
+                messageFound = true;
+                logger.log("[Web Search Stream] Message output item added");
+                
+                const messageItem = parsed.item;
+                const textContent = messageItem.content?.find((c: any) => c.type === 'output_text');
+                
+                if (textContent?.text) {
+                  content = textContent.text.trim();
+                  logger.log(`[Web Search Stream] Extracted message content (${content.length} chars)`);
+                  
+                  // Extract citations from annotations
+                  if (textContent.annotations) {
+                    for (const annotation of textContent.annotations) {
+                      if (annotation.type === 'url_citation') {
+                        const citedText = content.slice(annotation.start_index, annotation.end_index);
+                        citations.push({
+                          url: annotation.url,
+                          text: citedText,
+                          startIndex: annotation.start_index,
+                          endIndex: annotation.end_index,
+                        });
+                      }
+                    }
+                    logger.log(`[Web Search Stream] Extracted ${citations.length} citations from added event`);
+                  }
+                } else {
+                  logger.debug("[Web Search Stream] Message item added but no text content found", JSON.stringify(messageItem, null, 2));
+                }
+              } else if (parsed.item?.type === 'reasoning') {
+                logger.debug("[Web Search Stream] Reasoning item added (will wait for message)");
+              }
+            }
+            
+            // Handle response.output_item.delta event - incremental content updates
+            if (parsed.type === 'response.output_item.delta') {
+              logger.debug("[Web Search Stream] Output item delta received");
+              
+              if (parsed.delta) {
+                // Check for text deltas in content
+                if (parsed.delta.content) {
+                  for (const deltaContent of parsed.delta.content) {
+                    if (deltaContent.type === 'output_text' && deltaContent.text) {
+                      content += deltaContent.text;
+                      logger.debug(`[Web Search Stream] Accumulated delta content (total: ${content.length} chars)`);
+                    }
+                  }
+                }
+              }
+            }
+            
+            // Handle response.output_item.done event
+            if (parsed.type === 'response.output_item.done') {
+              logger.debug(`[Web Search Stream] Output item done: ${parsed.item?.type || 'unknown'}`);
+              
+              if (parsed.item?.type === 'message') {
+                const messageItem = parsed.item;
+                const textContent = messageItem.content?.find((c: any) => c.type === 'output_text');
+                
+                if (textContent?.text && !content) {
+                  content = textContent.text.trim();
+                  logger.log(`[Web Search Stream] Extracted content from done event (${content.length} chars)`);
+                }
+                
+                // Extract citations from done event
+                if (textContent?.annotations) {
+                  citations = [];
+                  for (const annotation of textContent.annotations) {
+                    if (annotation.type === 'url_citation') {
+                      const citedText = content.slice(annotation.start_index, annotation.end_index);
+                      citations.push({
+                        url: annotation.url,
+                        text: citedText,
+                        startIndex: annotation.start_index,
+                        endIndex: annotation.end_index,
+                      });
+                    }
+                  }
+                  logger.log(`[Web Search Stream] Extracted ${citations.length} citations from done event`);
+                }
+              }
+            }
+            
+            // Handle response.completed event - extract final citations
+            if (parsed.type === 'response.completed' && parsed.response) {
+              logger.log("[Web Search Stream] Response completed event received");
+              
+              // Log full structure first time for debugging
+              if (!completedEventLogged) {
+                logger.debug("[Web Search Stream] Completed event structure:", JSON.stringify(parsed.response, null, 2));
+                completedEventLogged = true;
+              }
+              
+              const completedResponse = parsed.response;
+              
+              // Check for root-level output_text
+              if (completedResponse.output_text && completedResponse.output_text.trim()) {
+                content = completedResponse.output_text.trim();
+                logger.log(`[Web Search Stream] Using root-level output_text (${content.length} chars)`);
+              }
+              
+              // Check output array for message
+              const messageOutput = completedResponse.output?.find((o: any) => o.type === 'message');
+              
+              if (messageOutput) {
+                logger.debug("[Web Search Stream] Found message output in completed event");
+                const textContent = messageOutput.content?.find((c: any) => c.type === 'output_text');
+                
+                if (textContent?.text) {
+                  if (!content) {
+                    content = textContent.text.trim();
+                    logger.log(`[Web Search Stream] Extracted content from completed event (${content.length} chars)`);
+                  } else {
+                    logger.debug("[Web Search Stream] Content already exists, keeping existing");
+                  }
+                  
+                  // Extract all citations from completed response (overwrite if we have better data)
+                  if (textContent.annotations && textContent.annotations.length > 0) {
+                    citations = [];
+                    for (const annotation of textContent.annotations) {
+                      if (annotation.type === 'url_citation') {
+                        const citedText = content.slice(annotation.start_index, annotation.end_index);
+                        citations.push({
+                          url: annotation.url,
+                          text: citedText,
+                          startIndex: annotation.start_index,
+                          endIndex: annotation.end_index,
+                        });
+                      }
+                    }
+                    logger.log(`[Web Search Stream] Extracted ${citations.length} citations from completed event`);
+                  }
+                } else {
+                  logger.debug("[Web Search Stream] Message output found but no text content", JSON.stringify(messageOutput, null, 2));
+                }
+              } else {
+                logger.debug("[Web Search Stream] No message output in completed event. Output types:", 
+                  completedResponse.output?.map((o: any) => o.type).join(', ') || 'none');
+              }
+            }
+            
+            // Handle errors
+            if (parsed.type === 'error' || parsed.error) {
+              const errorMessage = parsed.error?.message || parsed.message || 'Stream error';
+              logger.error("[Web Search Stream] Stream error:", errorMessage);
+              throw new Error(errorMessage);
+            }
+          } catch (parseError) {
+            // Skip malformed JSON chunks
+            if (data && data.length > 0 && data !== '[DONE]') {
+              logger.debug("[Web Search Stream] Failed to parse chunk:", data.substring(0, 100));
+            }
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    if (!content) {
+      logger.error("[Web Search Stream] No content extracted from stream");
+      logger.error("[Web Search Stream] Events received:", receivedEvents.join(', '));
+      logger.error("[Web Search Stream] Message found:", messageFound);
+      throw new Error(`No text content found in streaming response. Events received: ${receivedEvents.join(', ') || 'none'}`);
+    }
+
+    logger.log(`[Web Search Stream] Extracted content (${content.length} chars) and ${citations.length} citations`);
+
+    return {
+      content,
+      citations,
+    };
+  } catch (error) {
+    logger.error("[Web Search Stream] callOpenRouterWithWebSearchStream error:", error);
+    if (error instanceof Error) {
+      if (error.message.includes('timed out') || error.message.includes('timeout')) {
+        throw error;
+      }
+      if (error.name === 'TypeError' && (error.message.includes('fetch') || error.message.includes('network'))) {
+        throw new Error('Connection error. Unable to reach the AI service. Please check your connection and try again.');
+      }
+      throw error;
+    }
+    throw new Error("Failed to call OpenRouter API with web search streaming");
+  }
+}
+
+
+/**
+ * Call OpenRouter Responses API with web search enabled
+ * Uses the Responses API Beta endpoint with web search plugin
+ * Uses streaming to receive complete responses with message output
+ */
+export async function callOpenRouterWithWebSearch({
+  context,
+  useFallback = false,
+  maxTokens,
+  temperature = DEFAULT_TEMPERATURE,
+  maxResults = WEB_SEARCH_MAX_RESULTS,
+}: {
+  context: string;
+  useFallback?: boolean;
+  maxTokens?: number;
+  temperature?: number;
+  maxResults?: number;
+}): Promise<WebSearchResult> {
+  // Try streaming first (recommended approach)
+  try {
+    logger.log("[Web Search] Attempting streaming web search...");
+    return await callOpenRouterWithWebSearchStream({
+      context,
+      useFallback,
+      maxTokens,
+      temperature,
+      maxResults,
+    });
+  } catch (streamError) {
+    logger.warn("[Web Search] Streaming failed, falling back to non-streaming:", streamError);
+    
+    // Fallback to non-streaming request
+    const apiKey = process.env.OPENROUTER_API_KEY;
+
+    if (!apiKey) {
+      throw new Error("OpenRouter API key is not configured");
+    }
+
+    const modelToUse = useFallback ? FALLBACK_MODEL : DEFAULT_MODEL;
+    logger.log(`[Web Search] Using non-streaming fallback with model: ${modelToUse}`);
+
+    try {
+      const response = await fetchWithTimeout(OPENROUTER_RESPONSES_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+          "HTTP-Referer":
+            process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+          "X-Title": "LinkedIn Post Generator",
+        },
+        body: JSON.stringify({
+          model: modelToUse,
+          input: [
+            {
+              type: 'message',
+              role: 'user',
+              content: [
+                {
+                  type: 'input_text',
+                  text: context,
+                },
+              ],
+            },
+          ],
+          plugins: [{ id: 'web', max_results: maxResults }],
+          temperature,
+          max_output_tokens: maxTokens || 9000,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.error?.message || errorData.message || `API error: ${response.statusText}`;
+        logger.error("[Web Search] OpenRouter API error response:", {
+          status: response.status,
+          statusText: response.statusText,
+          errorData,
+        });
+        throw new Error(errorMessage);
+      }
+
+      const data: OpenRouterWebSearchResponse = await response.json();
+
+      logger.debug("[Web Search] OpenRouter API response structure:", JSON.stringify(data, null, 2));
+
+      if (data.error) {
+        logger.error("[Web Search] OpenRouter API error:", data.error);
+        throw new Error(data.error.message || "API returned an error");
+      }
+
+      let content = '';
+      let citations: WebSearchCitation[] = [];
 
     // Priority 1: Check for root-level output_text
     if (data.output_text && data.output_text.trim()) {
@@ -719,30 +1036,21 @@ export async function callOpenRouterWithWebSearch({
       }
     }
 
-    if (!content) {
-      logger.error("[Web Search] No text content found in response. Full response:", JSON.stringify(data, null, 2));
-      throw new Error("No text content found in API response. The response format may be unexpected.");
-    }
-
-    logger.log(`[Web Search] Extracted content (${content.length} chars) and ${citations.length} citations`);
-
-    return {
-      content,
-      citations,
-    };
-  } catch (error) {
-    logger.error("[Web Search] callOpenRouterWithWebSearch error:", error);
-    if (error instanceof Error) {
-      // Check if it's a timeout error
-      if (error.message.includes('timed out') || error.message.includes('timeout')) {
-        throw error;
+      if (!content) {
+        logger.error("[Web Search] No text content found in response. Full response:", JSON.stringify(data, null, 2));
+        throw new Error("No text content found in API response. The response format may be unexpected.");
       }
-      // Check if it's a network error
-      if (error.name === 'TypeError' && (error.message.includes('fetch') || error.message.includes('network'))) {
-        throw new Error('Connection error. Unable to reach the AI service. Please check your connection and try again.');
-      }
-      throw error;
+
+      logger.log(`[Web Search] Extracted content (${content.length} chars) and ${citations.length} citations`);
+
+      return {
+        content,
+        citations,
+      };
+    } catch (fallbackError) {
+      // If fallback also fails, throw the original streaming error
+      logger.error("[Web Search] Non-streaming fallback also failed:", fallbackError);
+      throw streamError;
     }
-    throw new Error("Failed to call OpenRouter API with web search");
   }
 }

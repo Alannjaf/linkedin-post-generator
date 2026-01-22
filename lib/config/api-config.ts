@@ -27,3 +27,5 @@ export const MAX_TOKENS = {
 
 // Web search configuration
 export const WEB_SEARCH_MAX_RESULTS = 3; // Default number of search results to retrieve (1-10)
+export const WEB_SEARCH_POLL_INTERVAL = 1000; // Milliseconds between polling attempts (1 second)
+export const WEB_SEARCH_MAX_POLL_ATTEMPTS = 10; // Maximum number of polling attempts (max 10 seconds wait)
