@@ -174,7 +174,7 @@ export async function generatePostStreaming(
             }
             if (parsed.citations) {
               citations = parsed.citations;
-              console.log('[Client Streaming] Received citations:', citations.length);
+              console.log('[Client Streaming] Received citations:', citations?.length ?? 0);
             }
             if (parsed.error) {
               console.error('[Client Streaming] Server error:', parsed.error);
