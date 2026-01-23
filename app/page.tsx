@@ -4,7 +4,6 @@ import { useState, useEffect, useMemo, useCallback, useRef, Suspense } from 'rea
 import { useRouter, useSearchParams } from 'next/navigation';
 import DraftManager from '@/components/DraftManager';
 
-import SavedPostsPanel from '@/components/SavedPostsPanel';
 import SavedContentManager from '@/components/SavedContentManager';
 import WorkflowStepper from '@/components/WorkflowStepper';
 import FloatingActionMenu from '@/components/FloatingActionMenu';
@@ -16,9 +15,8 @@ import ExportSection from '@/components/ExportSection';
 import PreviewStats from '@/components/PreviewStats';
 import ThemeToggle from '@/components/ThemeToggle';
 import { saveDraft, getAllDrafts } from '@/lib/storage';
-import { savePost, getAllSavedPosts, deleteSavedPost } from '@/lib/saved-posts';
 import { convertHtmlToLinkedInFormat, htmlToPlainText, plainTextToHtml } from '@/lib/linkedin-formatter';
-import { Language, Tone, PostLength, Draft, TrendingPost, GeneratedCarousel } from '@/types';
+import { Language, Tone, PostLength, Draft, GeneratedCarousel } from '@/types';
 import { usePostState } from '@/hooks/usePostState';
 import { useImageGeneration } from '@/hooks/useImageGeneration';
 import { useDraftsAndSaved } from '@/hooks/useDraftsAndSaved';
@@ -43,7 +41,7 @@ function HomeContent() {
   // Reference to track streaming state
   const streamingContentRef = useRef<string>('');
 
-  // Initialize saved posts and drafts (handled in hooks)
+  // Initialize drafts (handled in hooks)
 
   // Show toast for success messages
   useEffect(() => {
@@ -64,7 +62,23 @@ function HomeContent() {
   useEffect(() => {
     const contextParam = searchParams.get('context');
     if (contextParam) {
-      const decodedContext = decodeURIComponent(contextParam);
+      let decodedContext: string;
+      try {
+        // Next.js searchParams.get() already returns decoded values, but we check
+        // if it's still encoded (contains %XX sequences) and decode if needed
+        // This handles edge cases where the parameter might be double-encoded
+        if (contextParam.includes('%')) {
+          decodedContext = decodeURIComponent(contextParam);
+        } else {
+          decodedContext = contextParam;
+        }
+      } catch (error) {
+        // If decoding fails (malformed URI), use the raw parameter
+        // This can happen if the content contains invalid percent-encoded sequences
+        console.warn('Failed to decode context parameter, using raw value:', error);
+        decodedContext = contextParam;
+      }
+      
       setInspirationContext(decodedContext);
       postState.setOriginalContext(decodedContext);
       setSuccess('Loaded context from Swipe File. Ready to generate!');
@@ -167,25 +181,6 @@ function HomeContent() {
     }
   }, [postState, imageGeneration]);
 
-  const handleUseAsInspiration = useCallback((post: TrendingPost) => {
-    const inspirationText = `Inspired by this post:\n\n${post.content}\n\nCreate a similar but original post on this topic.`;
-    setInspirationContext(inspirationText);
-    postState.setOriginalContext(inspirationText);
-    setSuccess('Post loaded as inspiration! Review and edit the context, then click Generate Post.');
-    setError(null);
-    setTimeout(() => {
-      const textarea = document.querySelector('#context') as HTMLTextAreaElement;
-      if (textarea) {
-        textarea.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        textarea.focus();
-      }
-    }, 100);
-  }, [postState]);
-
-
-  const handleDeleteSavedPost = useCallback(async (postId: string) => {
-    await draftsAndSaved.handleDeleteSavedPost(postId);
-  }, [draftsAndSaved]);
 
   const handleUseCarousel = useCallback((carouselRow: CarouselRow) => {
     // Map CarouselRow to GeneratedCarousel
@@ -388,12 +383,10 @@ function HomeContent() {
       {/* Floating Action Menu (Mobile) */}
       <FloatingActionMenu
         onDraftsClick={() => draftsAndSaved.setIsDraftManagerOpen(true)}
-        onSavedPostsClick={() => draftsAndSaved.setIsSavedPostsOpen(true)}
         onSwipeFileClick={() => router.push('/swipe-file')}
         onSavedContentClick={() => draftsAndSaved.setIsSavedContentOpen(true)}
         onCopyClick={postState.postContent ? handleCopyToClipboard : undefined}
         draftsCount={draftsAndSaved.draftsCount}
-        savedPostsCount={draftsAndSaved.savedPostsCount}
         canCopy={!!postState.postContent}
       />
 
@@ -405,16 +398,6 @@ function HomeContent() {
         }}
         isOpen={draftsAndSaved.isDraftManagerOpen}
         onClose={() => draftsAndSaved.setIsDraftManagerOpen(false)}
-      />
-
-      {/* Saved Posts Panel */}
-      <SavedPostsPanel
-        onUseAsInspiration={handleUseAsInspiration}
-        onPostDeleted={() => {
-          draftsAndSaved.refreshSavedPostIds();
-        }}
-        isOpen={draftsAndSaved.isSavedPostsOpen}
-        onClose={() => draftsAndSaved.setIsSavedPostsOpen(false)}
       />
 
       {/* Saved Content Manager (Adapted Posts & Carousels) */}

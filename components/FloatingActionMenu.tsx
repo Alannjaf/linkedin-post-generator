@@ -4,23 +4,19 @@ import { useState } from 'react';
 
 interface FloatingActionMenuProps {
   onDraftsClick: () => void;
-  onSavedPostsClick: () => void;
   onSwipeFileClick?: () => void;
   onSavedContentClick?: () => void;
   onCopyClick?: () => void;
   draftsCount?: number;
-  savedPostsCount?: number;
   canCopy?: boolean;
 }
 
 export default function FloatingActionMenu({
   onDraftsClick,
-  onSavedPostsClick,
   onSwipeFileClick,
   onSavedContentClick,
   onCopyClick,
   draftsCount = 0,
-  savedPostsCount = 0,
   canCopy = false,
 }: FloatingActionMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -52,19 +48,6 @@ export default function FloatingActionMenu({
       gradient: 'from-pink-500 to-rose-500',
       shadowColor: 'shadow-pink-500/25',
     }] : []),
-    {
-      id: 'saved',
-      label: 'Saved Posts',
-      icon: (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
-        </svg>
-      ),
-      onClick: onSavedPostsClick,
-      count: savedPostsCount,
-      gradient: 'from-blue-500 to-cyan-500',
-      shadowColor: 'shadow-blue-500/25',
-    },
     ...(onSavedContentClick
       ? [
         {
@@ -168,9 +151,9 @@ export default function FloatingActionMenu({
         </button>
 
         {/* Notification Badge */}
-        {!isOpen && (draftsCount > 0 || savedPostsCount > 0) && (
+        {!isOpen && draftsCount > 0 && (
           <div className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-lg animate-pulse">
-            {draftsCount + savedPostsCount > 9 ? '9+' : draftsCount + savedPostsCount}
+            {draftsCount > 9 ? '9+' : draftsCount}
           </div>
         )}
       </div>
