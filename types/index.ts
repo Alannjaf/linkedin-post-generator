@@ -202,10 +202,23 @@ export interface TrendingPostsCacheRow {
   expires_at: string;
 }
 
+
 export interface SavedPostRow {
   id: number;
   post_id: string;
   post_data: TrendingPost;
+  saved_at: string;
+  notes?: string | null;
+}
+
+export interface SwipeFilePost {
+  id: number;
+  content: string;
+  author_name: string;
+  author_profile_url?: string | null;
+  post_url?: string | null;
+  likes: number;
+  comments: number;
   saved_at: string;
   notes?: string | null;
 }

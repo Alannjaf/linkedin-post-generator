@@ -5,7 +5,8 @@
     "description": "Generate, save, and analyze LinkedIn posts directly from LinkedIn",
     "permissions": [
         "storage",
-        "activeTab"
+        "activeTab",
+        "alarms"
     ],
     "host_permissions": [
         "https://www.linkedin.com/*",
@@ -40,7 +41,6 @@
         }
     ],
     "background": {
-        "service_worker": "background.js",
-        "type": "module"
+        "service_worker": "background.js"
     }
 }

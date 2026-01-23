@@ -5,6 +5,7 @@ import { useState } from 'react';
 interface FloatingActionMenuProps {
   onDraftsClick: () => void;
   onSavedPostsClick: () => void;
+  onSwipeFileClick?: () => void;
   onSavedContentClick?: () => void;
   onCopyClick?: () => void;
   draftsCount?: number;
@@ -15,6 +16,7 @@ interface FloatingActionMenuProps {
 export default function FloatingActionMenu({
   onDraftsClick,
   onSavedPostsClick,
+  onSwipeFileClick,
   onSavedContentClick,
   onCopyClick,
   draftsCount = 0,
@@ -37,6 +39,19 @@ export default function FloatingActionMenu({
       gradient: 'from-purple-500 to-violet-500',
       shadowColor: 'shadow-purple-500/25',
     },
+    ...(onSwipeFileClick ? [{
+      id: 'swipe-file',
+      label: 'Swipe File',
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+        </svg>
+      ),
+      onClick: onSwipeFileClick,
+      count: 0,
+      gradient: 'from-pink-500 to-rose-500',
+      shadowColor: 'shadow-pink-500/25',
+    }] : []),
     {
       id: 'saved',
       label: 'Saved Posts',

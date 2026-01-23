@@ -10,6 +10,20 @@ function getDb() {
     return neon(databaseUrl);
 }
 
+// CORS headers Helper
+function corsHeaders() {
+    return {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    };
+}
+
+// Handle OPTIONS preflight
+export async function OPTIONS() {
+    return NextResponse.json({}, { headers: corsHeaders() });
+}
+
 // Ensure analytics tables exist
 async function ensureAnalyticsTables() {
     const sql = getDb();
@@ -61,7 +75,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({
                 success: true,
                 message: `Synced ${data.length} follower entries`,
-            });
+            }, { headers: corsHeaders() });
         }
 
         if (type === 'post_analytics') {
@@ -84,18 +98,18 @@ export async function POST(request: NextRequest) {
           recorded_at = NOW()
       `;
 
-            return NextResponse.json({ success: true });
+            return NextResponse.json({ success: true }, { headers: corsHeaders() });
         }
 
         return NextResponse.json(
             { error: 'Invalid analytics type' },
-            { status: 400 }
+            { status: 400, headers: corsHeaders() }
         );
     } catch (error) {
         console.error('[Extension API] Failed to save analytics:', error);
         return NextResponse.json(
             { error: 'Failed to save analytics' },
-            { status: 500 }
+            { status: 500, headers: corsHeaders() }
         );
     }
 }
@@ -108,6 +122,15 @@ export async function GET(request: NextRequest) {
         const { searchParams } = new URL(request.url);
         const type = searchParams.get('type') || 'summary';
 
+        function formatDate(date: Date) {
+            if (!dateFormat) {
+                // Use Intl.DateTimeFormat for safer date formatting without external libraries
+                dateFormat = new Intl.DateTimeFormat('en-CA'); // YYYY-MM-DD
+            }
+            return dateFormat.format(date);
+        }
+        let dateFormat: Intl.DateTimeFormat;
+
         if (type === 'followers') {
             const history = await sql`
         SELECT date, count FROM follower_history 
@@ -115,7 +138,7 @@ export async function GET(request: NextRequest) {
         LIMIT 90
       `;
 
-            return NextResponse.json({ history });
+            return NextResponse.json({ history }, { headers: corsHeaders() });
         }
 
         if (type === 'posts') {
@@ -125,7 +148,7 @@ export async function GET(request: NextRequest) {
         LIMIT 50
       `;
 
-            return NextResponse.json({ posts });
+            return NextResponse.json({ posts }, { headers: corsHeaders() });
         }
 
         // Summary
@@ -165,12 +188,12 @@ export async function GET(request: NextRequest) {
                 avgEngagement: parseFloat(postStats[0]?.avg_engagement || 0),
                 top: topPosts,
             },
-        });
+        }, { headers: corsHeaders() });
     } catch (error) {
         console.error('[Extension API] Failed to get analytics:', error);
         return NextResponse.json(
             { error: 'Failed to get analytics' },
-            { status: 500 }
+            { status: 500, headers: corsHeaders() }
         );
     }
 }

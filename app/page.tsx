@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import DraftManager from '@/components/DraftManager';
 
 import SavedPostsPanel from '@/components/SavedPostsPanel';
@@ -24,7 +25,9 @@ import { useDraftsAndSaved } from '@/hooks/useDraftsAndSaved';
 import { CarouselRow } from '@/lib/db';
 
 
-export default function Home() {
+function HomeContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [inspirationContext, setInspirationContext] = useState<string>('');
@@ -56,6 +59,29 @@ export default function Home() {
       setToast({ message: error, type: 'error' });
     }
   }, [error]);
+
+  // Handle context from URL query params (for Remix flow)
+  useEffect(() => {
+    const contextParam = searchParams.get('context');
+    if (contextParam) {
+      const decodedContext = decodeURIComponent(contextParam);
+      setInspirationContext(decodedContext);
+      postState.setOriginalContext(decodedContext);
+      setSuccess('Loaded context from Swipe File. Ready to generate!');
+
+      // Use timeout to ensure DOM is ready and scroll
+      setTimeout(() => {
+        const textarea = document.querySelector('#context') as HTMLTextAreaElement;
+        if (textarea) {
+          textarea.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          textarea.focus();
+        }
+      }, 500);
+
+      // Clean up URL without refresh
+      router.replace('/', { scroll: false });
+    }
+  }, [searchParams, postState, router]);
 
   const handlePostGenerated = useCallback((content: string, generatedHashtags: string[], language: Language, tone: Tone, length: PostLength, context: string, citations?: any[]) => {
     setIsStreaming(false);
@@ -363,6 +389,7 @@ export default function Home() {
       <FloatingActionMenu
         onDraftsClick={() => draftsAndSaved.setIsDraftManagerOpen(true)}
         onSavedPostsClick={() => draftsAndSaved.setIsSavedPostsOpen(true)}
+        onSwipeFileClick={() => router.push('/swipe-file')}
         onSavedContentClick={() => draftsAndSaved.setIsSavedContentOpen(true)}
         onCopyClick={postState.postContent ? handleCopyToClipboard : undefined}
         draftsCount={draftsAndSaved.draftsCount}
@@ -406,3 +433,11 @@ export default function Home() {
   );
 }
 
+
+export default function Home() {
+  return (
+    <Suspense fallback={null}>
+      <HomeContent />
+    </Suspense>
+  );
+}
