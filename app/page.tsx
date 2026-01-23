@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import DraftManager from '@/components/DraftManager';
-import TrendingPostsPanel from '@/components/TrendingPostsPanel';
+
 import SavedPostsPanel from '@/components/SavedPostsPanel';
 import SavedContentManager from '@/components/SavedContentManager';
 import WorkflowStepper from '@/components/WorkflowStepper';
@@ -142,7 +142,7 @@ export default function Home() {
   }, [postState, imageGeneration]);
 
   const handleUseAsInspiration = useCallback((post: TrendingPost) => {
-    const inspirationText = `Inspired by this trending post:\n\n${post.content}\n\nCreate a similar but original post on this topic.`;
+    const inspirationText = `Inspired by this post:\n\n${post.content}\n\nCreate a similar but original post on this topic.`;
     setInspirationContext(inspirationText);
     postState.setOriginalContext(inspirationText);
     setSuccess('Post loaded as inspiration! Review and edit the context, then click Generate Post.');
@@ -156,13 +156,6 @@ export default function Home() {
     }, 100);
   }, [postState]);
 
-  const handleSavePost = useCallback(async (post: TrendingPost) => {
-    await draftsAndSaved.handleSavePost(
-      post,
-      () => setToast({ message: 'Post saved! You can find it in Saved Posts.', type: 'success' }),
-      (err) => setToast({ message: 'Failed to save post. Please try again.', type: 'error' })
-    );
-  }, [draftsAndSaved]);
 
   const handleDeleteSavedPost = useCallback(async (postId: string) => {
     await draftsAndSaved.handleDeleteSavedPost(postId);
@@ -334,14 +327,7 @@ export default function Home() {
           </>
         )}
 
-        {/* Trending Posts Section - Full Width */}
-        <div className="mt-8 lg:mt-12">
-          <TrendingPostsPanel
-            onUseAsInspiration={handleUseAsInspiration}
-            onSavePost={handleSavePost}
-            savedPostIds={draftsAndSaved.savedPostIds}
-          />
-        </div>
+
 
         {/* Enhanced Preview Section */}
         {postState.postContent && (
