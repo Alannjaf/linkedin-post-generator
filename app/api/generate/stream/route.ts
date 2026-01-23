@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     if (!context || !language || !tone || !length) {
       return new Response(
         JSON.stringify({ error: "Missing required parameters" }),
-        { 
+        {
           status: 400,
           headers: { 'Content-Type': 'application/json' }
         }
@@ -32,20 +32,26 @@ export async function POST(request: NextRequest) {
 
     let enrichedContext = context;
     let webSearchCitations: Array<{ url: string; text: string; startIndex: number; endIndex: number }> | undefined = undefined;
+    let webSearchStatus: 'idle' | 'searching' | 'completed' | 'failed' = 'idle';
+    let webSearchSourceCount = 0;
 
     // If web search is enabled, search for information about the context first
     if (enableWebSearch) {
       try {
+        webSearchStatus = 'searching';
         logger.log("[Stream API] Web search enabled, searching for context information...");
         const webSearchResult = await callOpenRouterWithWebSearch({
           context: `Search for current information about: ${context}. Provide relevant details and context.`,
         });
-        
+
         // Combine original context with web search results for richer context
         enrichedContext = `${context}\n\nAdditional context from web search:\n${webSearchResult.content}`;
         webSearchCitations = webSearchResult.citations;
+        webSearchSourceCount = webSearchResult.citations.length;
+        webSearchStatus = 'completed';
         logger.log(`[Stream API] Web search completed, found ${webSearchResult.citations.length} citations`);
       } catch (error) {
+        webSearchStatus = 'failed';
         logger.warn("[Stream API] Web search failed, falling back to standard generation:", error);
         // Fallback to standard generation if web search fails
         // Continue with original context
@@ -53,7 +59,7 @@ export async function POST(request: NextRequest) {
     }
 
     const prompt = await buildPostPrompt({ context: enrichedContext, language, tone, length });
-    
+
     console.log('[Stream API] Starting streaming response for post generation');
 
     // Get the streaming response from OpenRouter
@@ -65,36 +71,49 @@ export async function POST(request: NextRequest) {
 
     // Create an async iterator to process the stream
     async function* streamProcessor(): AsyncGenerator<string, void, unknown> {
+      // Send web search status first if enabled
+      if (enableWebSearch) {
+        yield `data: ${JSON.stringify({
+          status: webSearchStatus,
+          sourceCount: webSearchSourceCount,
+          message: webSearchStatus === 'completed'
+            ? `Found ${webSearchSourceCount} sources`
+            : webSearchStatus === 'failed'
+              ? 'Web search failed, using provided context'
+              : 'Searching the web...'
+        })}\n\n`;
+      }
+
       const reader = openRouterStream.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
       let chunkCount = 0;
-      
+
       try {
         while (true) {
           const { done, value } = await reader.read();
-          
+
           if (done) {
             console.log(`[Stream API] Stream done after ${chunkCount} chunks`);
             break;
           }
-          
+
           chunkCount++;
           buffer += decoder.decode(value, { stream: true });
-          
+
           // Process complete lines
           const lines = buffer.split('\n');
           buffer = lines.pop() || '';
-          
+
           for (const line of lines) {
             const trimmedLine = line.trim();
-            
+
             if (!trimmedLine || !trimmedLine.startsWith('data: ')) {
               continue;
             }
-            
+
             const data = trimmedLine.slice(6);
-            
+
             // Check for stream end
             if (data === '[DONE]') {
               console.log('[Stream API] Received [DONE] signal');
@@ -105,16 +124,16 @@ export async function POST(request: NextRequest) {
               yield 'data: [DONE]\n\n';
               return;
             }
-            
+
             try {
               const parsed: OpenRouterStreamChunk = JSON.parse(data);
-              
+
               if (parsed.error) {
                 console.error('[Stream API] OpenRouter error:', parsed.error);
                 yield `data: ${JSON.stringify({ error: parsed.error.message })}\n\n`;
                 return;
               }
-              
+
               const content = parsed.choices?.[0]?.delta?.content;
               if (content) {
                 // Log first few chunks
@@ -123,7 +142,7 @@ export async function POST(request: NextRequest) {
                 }
                 yield `data: ${JSON.stringify({ content })}\n\n`;
               }
-              
+
               // Check for finish reason
               if (parsed.choices?.[0]?.finish_reason) {
                 console.log('[Stream API] Finish reason:', parsed.choices[0].finish_reason);
@@ -140,7 +159,7 @@ export async function POST(request: NextRequest) {
             }
           }
         }
-        
+
         // Process remaining buffer
         if (buffer.trim()) {
           const trimmedLine = buffer.trim();
@@ -159,14 +178,14 @@ export async function POST(request: NextRequest) {
             }
           }
         }
-        
+
         // Send citations if web search was enabled
         if (webSearchCitations && webSearchCitations.length > 0) {
           yield `data: ${JSON.stringify({ citations: webSearchCitations })}\n\n`;
         }
         // Send final [DONE]
         yield 'data: [DONE]\n\n';
-        
+
       } finally {
         reader.releaseLock();
       }
@@ -175,17 +194,17 @@ export async function POST(request: NextRequest) {
     // Convert async iterator to ReadableStream
     const encoder = new TextEncoder();
     const iterator = streamProcessor();
-    
+
     const stream = new ReadableStream({
       async pull(controller) {
         try {
           const { value, done } = await iterator.next();
-          
+
           if (done) {
             controller.close();
             return;
           }
-          
+
           controller.enqueue(encoder.encode(value));
         } catch (error) {
           console.error('[Stream API] Pull error:', error);
@@ -216,10 +235,10 @@ export async function POST(request: NextRequest) {
     console.error("[Stream API] Error generating post:", error);
     const errorMessage =
       error instanceof Error ? error.message : "Failed to generate post";
-    
+
     return new Response(
       JSON.stringify({ error: errorMessage }),
-      { 
+      {
         status: 500,
         headers: { 'Content-Type': 'application/json' }
       }

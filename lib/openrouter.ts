@@ -75,6 +75,7 @@ export interface StreamingCallbacks {
   onChunk: (chunk: string, fullContent: string) => void;
   onComplete: (result: GeneratedPost) => void;
   onError: (error: Error) => void;
+  onSearchStatus?: (status: 'searching' | 'completed' | 'failed', sourceCount: number, message: string) => void;
 }
 
 /**
@@ -101,7 +102,7 @@ export async function generatePostStreaming(
     });
 
     clearTimeout(timeoutId);
-    
+
     console.log('[Client Streaming] Response received, status:', response.status);
 
     if (!response.ok) {
@@ -136,18 +137,18 @@ export async function generatePostStreaming(
         chunkCount++;
         const decodedChunk = decoder.decode(value, { stream: true });
         buffer += decodedChunk;
-        
+
         // Log first few chunks to debug
         if (chunkCount <= 3) {
           console.log(`[Client Streaming] Chunk ${chunkCount}:`, decodedChunk.substring(0, 100));
         }
-        
+
         const lines = buffer.split('\n');
         buffer = lines.pop() || '';
 
         for (const line of lines) {
           const trimmedLine = line.trim();
-          
+
           if (!trimmedLine || !trimmedLine.startsWith('data: ')) {
             continue;
           }
@@ -167,6 +168,9 @@ export async function generatePostStreaming(
             if (parsed.content) {
               fullContent += parsed.content;
               callbacks.onChunk(parsed.content, fullContent);
+            }
+            if (parsed.status && callbacks.onSearchStatus) {
+              callbacks.onSearchStatus(parsed.status, parsed.sourceCount || 0, parsed.message || '');
             }
             if (parsed.citations) {
               citations = parsed.citations;
@@ -199,7 +203,7 @@ export async function generatePostStreaming(
   } catch (error) {
     clearTimeout(timeoutId);
     console.error('[Client Streaming] Error:', error);
-    
+
     if (error instanceof Error) {
       if (error.name === 'AbortError') {
         callbacks.onError(new Error('Request timed out. The server took too long to respond. Please try again.'));
@@ -212,7 +216,7 @@ export async function generatePostStreaming(
       callbacks.onError(error);
       return;
     }
-    
+
     callbacks.onError(new Error('Failed to generate post'));
   }
 }
@@ -337,7 +341,7 @@ export async function generatePostStreamingWithAbort(
 
         for (const line of lines) {
           const trimmedLine = line.trim();
-          
+
           if (!trimmedLine || !trimmedLine.startsWith('data: ')) {
             continue;
           }
@@ -373,7 +377,7 @@ export async function generatePostStreamingWithAbort(
     }
   } catch (error) {
     clearTimeout(timeoutId);
-    
+
     if (error instanceof Error) {
       if (error.name === 'AbortError' || error.message === 'Generation cancelled') {
         callbacks.onError(new Error('Generation cancelled'));
@@ -386,7 +390,7 @@ export async function generatePostStreamingWithAbort(
       callbacks.onError(error);
       return;
     }
-    
+
     callbacks.onError(new Error('Failed to generate post'));
   }
 }

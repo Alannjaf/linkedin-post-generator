@@ -45,6 +45,8 @@ export default function PostGenerator({ onPostGenerated, onError, initialContext
   const [showToneSelector, setShowToneSelector] = useState(false);
   const [useStreaming, setUseStreaming] = useState(true); // Default to streaming enabled
   const [enableWebSearch, setEnableWebSearch] = useState(false); // Web search toggle
+  const [searchStatus, setSearchStatus] = useState<'idle' | 'searching' | 'completed' | 'failed'>('idle');
+  const [searchMessage, setSearchMessage] = useState('');
 
   const {
     transcript: voiceTranscript,
@@ -137,7 +139,9 @@ export default function PostGenerator({ onPostGenerated, onError, initialContext
     if (useStreaming) {
       // Use streaming generation
       setIsStreaming(true);
-      
+      setSearchStatus('idle');
+      setSearchMessage('');
+
       try {
         await generatePostStreaming(params, {
           onChunk: (chunk, fullContent) => {
@@ -145,7 +149,7 @@ export default function PostGenerator({ onPostGenerated, onError, initialContext
             const estimatedLength = length === 'short' ? 300 : length === 'medium' ? 800 : 1500;
             const progress = Math.min(95, (fullContent.length / estimatedLength) * 100);
             setStreamProgress(progress);
-            
+
             // Send streaming update to parent
             if (onStreamingUpdate) {
               onStreamingUpdate(fullContent);
@@ -160,12 +164,18 @@ export default function PostGenerator({ onPostGenerated, onError, initialContext
           onError: (error) => {
             setIsStreaming(false);
             setIsGenerating(false);
+            setSearchStatus('idle');
             onError(error.message);
+          },
+          onSearchStatus: (status, sourceCount, message) => {
+            setSearchStatus(status);
+            setSearchMessage(message);
           },
         });
       } catch (error) {
         setIsStreaming(false);
         setIsGenerating(false);
+        setSearchStatus('idle');
         const errorMessage = error instanceof Error ? error.message : 'Failed to generate post';
         onError(errorMessage);
       }
@@ -208,8 +218,8 @@ export default function PostGenerator({ onPostGenerated, onError, initialContext
               aria-label={isListening ? 'Stop voice input' : 'Start voice input'}
               aria-pressed={isListening}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 ${isListening
-                  ? 'bg-red-500/20 text-red-400 border border-red-500/50 animate-pulse-glow'
-                  : 'btn-secondary'
+                ? 'bg-red-500/20 text-red-400 border border-red-500/50 animate-pulse-glow'
+                : 'btn-secondary'
                 } disabled:opacity-50 disabled:cursor-not-allowed`}
             >
               {isListening ? (
@@ -462,16 +472,27 @@ export default function PostGenerator({ onPostGenerated, onError, initialContext
               style={{ width: `${streamProgress}%` }}
             />
           )}
-          
+
           <span className="relative flex items-center justify-center gap-2">
             {isGenerating ? (
               <>
                 {isStreaming ? (
                   <>
-                    <svg className="w-5 h-5 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
-                    <span>Generating... {streamProgress > 0 ? `${Math.round(streamProgress)}%` : ''}</span>
+                    {searchStatus === 'searching' || searchStatus === 'completed' ? (
+                      <>
+                        <svg className="w-5 h-5 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                        <span>{searchMessage || 'Searching the web...'}</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-5 h-5 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                        <span>Generating... {streamProgress > 0 ? `${Math.round(streamProgress)}%` : ''}</span>
+                      </>
+                    )}
                   </>
                 ) : (
                   <>
