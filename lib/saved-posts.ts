@@ -19,7 +19,6 @@ export async function savePost(post: TrendingPost, notes?: string): Promise<Save
 
     return await response.json();
   } catch (error) {
-    console.error('Failed to save post:', error);
     throw error instanceof Error ? error : new Error('Failed to save post');
   }
 }
@@ -36,7 +35,6 @@ export async function getAllSavedPosts(): Promise<SavedTrendingPost[]> {
     const savedPosts = await response.json();
     return savedPosts || [];
   } catch (error) {
-    console.error('Failed to load saved posts:', error);
     return [];
   }
 }
@@ -54,7 +52,6 @@ export async function deleteSavedPost(postId: string): Promise<boolean> {
 
     return true;
   } catch (error) {
-    console.error('Failed to delete saved post:', error);
     return false;
   }
 }

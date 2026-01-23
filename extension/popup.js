@@ -31,7 +31,7 @@ async function loadStats() {
         savedCountEl.textContent = data.savedCount || 0;
         generatedCountEl.textContent = data.generatedCount || 0;
     } catch (error) {
-        console.error('Failed to load stats:', error);
+        // Failed to load stats
     }
 }
 
@@ -97,7 +97,6 @@ async function handleGenerate() {
 
         showStatus('Generated successfully!', 'success');
     } catch (error) {
-        console.error('Generate error:', error);
         showStatus('Failed to generate. Is the app running?', 'error');
     } finally {
         generateBtn.disabled = false;

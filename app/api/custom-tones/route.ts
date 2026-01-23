@@ -28,7 +28,6 @@ export async function GET(request: NextRequest) {
     const tones = await getAllCustomTones(includePresets);
     return NextResponse.json(tones);
   } catch (error) {
-    console.error('Error fetching custom tones:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to fetch custom tones';
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
@@ -68,7 +67,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(customTone, { status: 201 });
   } catch (error) {
-    console.error('Error creating custom tone:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to create custom tone';
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
@@ -87,7 +85,6 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
   } catch (error) {
-    console.error('Error seeding presets:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to seed presets';
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }

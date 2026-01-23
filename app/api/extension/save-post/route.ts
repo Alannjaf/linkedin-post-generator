@@ -16,12 +16,16 @@ function corsHeaders() {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Access-Control-Max-Age': '86400',
     };
 }
 
 // Handle OPTIONS preflight
 export async function OPTIONS() {
-    return NextResponse.json({}, { headers: corsHeaders() });
+    return new NextResponse(null, {
+        status: 200,
+        headers: corsHeaders(),
+    });
 }
 
 // Ensure swipe_file table exists
@@ -43,18 +47,21 @@ async function ensureSwipeFileTable() {
 }
 
 export async function POST(request: NextRequest) {
+    // Ensure CORS headers are always included, even on errors
     try {
-        const body = await request.json();
-        console.log('[API] Received save-post request:', {
-            author: body.author?.name,
-            contentLength: body.content?.length,
-            url: body.postUrl
-        });
+        let body;
+        try {
+            body = await request.json();
+        } catch (parseError) {
+            return NextResponse.json(
+                { error: 'Invalid JSON in request body' },
+                { status: 400, headers: corsHeaders() }
+            );
+        }
 
         const { content, author, engagement, postUrl } = body;
 
         if (!content) {
-            console.log('[API] Error: Missing content');
             return NextResponse.json(
                 { error: 'Post content is required' },
                 { status: 400, headers: corsHeaders() }
@@ -86,14 +93,12 @@ export async function POST(request: NextRequest) {
         }
 
         if (existing.length > 0) {
-            console.log('[API] Post already exists, ID:', existing[0].id);
             return NextResponse.json(
                 { message: 'Post already saved', id: existing[0].id },
                 { status: 200, headers: corsHeaders() }
             );
         }
 
-        console.log('[API] Inserting new post...');
         // Insert new post
         const result = await sql`
       INSERT INTO swipe_file_posts (
@@ -116,17 +121,16 @@ export async function POST(request: NextRequest) {
       RETURNING id
     `;
 
-        console.log('[API] Success! Saved with ID:', result[0].id);
-
         return NextResponse.json({
             success: true,
             id: result[0].id,
             message: 'Post saved to swipe file',
         }, { headers: corsHeaders() });
     } catch (error) {
-        console.error('[Extension API] Failed to save post:', error);
+        // Ensure CORS headers are always included in error responses
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         return NextResponse.json(
-            { error: 'Failed to save post' },
+            { error: 'Failed to save post', details: errorMessage },
             { status: 500, headers: corsHeaders() }
         );
     }
@@ -181,7 +185,6 @@ export async function GET(request: NextRequest) {
             },
         }, { headers: corsHeaders() });
     } catch (error) {
-        console.error('[Extension API] Failed to get posts:', error);
         return NextResponse.json(
             { error: 'Failed to get posts' },
             { status: 500, headers: corsHeaders() }
@@ -206,7 +209,6 @@ export async function DELETE(request: NextRequest) {
 
         return NextResponse.json({ success: true }, { headers: corsHeaders() });
     } catch (error) {
-        console.error('[Extension API] Failed to delete post:', error);
         return NextResponse.json(
             { error: 'Failed to delete post' },
             { status: 500, headers: corsHeaders() }

@@ -33,7 +33,6 @@ export async function GET(
 
     return NextResponse.json(tone);
   } catch (error) {
-    console.error('Error fetching custom tone:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to fetch custom tone';
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
@@ -75,7 +74,6 @@ export async function PUT(
 
     return NextResponse.json(updatedTone);
   } catch (error) {
-    console.error('Error updating custom tone:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to update custom tone';
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
@@ -100,7 +98,6 @@ export async function DELETE(
     await deleteCustomTone(id);
     return NextResponse.json({ message: 'Custom tone deleted successfully' });
   } catch (error) {
-    console.error('Error deleting custom tone:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to delete custom tone';
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }

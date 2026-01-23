@@ -19,7 +19,6 @@ export async function saveDraft(draft: Omit<Draft, 'id' | 'createdAt' | 'updated
 
     return await response.json();
   } catch (error) {
-    console.error('Failed to save draft:', error);
     throw error instanceof Error ? error : new Error('Failed to save draft');
   }
 }
@@ -60,7 +59,6 @@ export async function getAllDrafts(page: number = 1, limit: number = 20): Promis
 
     return data;
   } catch (error) {
-    console.error('Failed to load drafts:', error);
     return {
       drafts: [],
       pagination: {
@@ -87,7 +85,6 @@ export async function getDraft(id: string): Promise<Draft | null> {
 
     return await response.json();
   } catch (error) {
-    console.error('Failed to load draft:', error);
     return null;
   }
 }
@@ -112,7 +109,6 @@ export async function updateDraft(id: string, updates: Partial<Omit<Draft, 'id' 
 
     return await response.json();
   } catch (error) {
-    console.error('Failed to update draft:', error);
     throw error instanceof Error ? error : new Error('Failed to update draft');
   }
 }
@@ -133,7 +129,6 @@ export async function deleteDraft(id: string): Promise<boolean> {
 
     return true;
   } catch (error) {
-    console.error('Failed to delete draft:', error);
     return false;
   }
 }
@@ -141,6 +136,5 @@ export async function deleteDraft(id: string): Promise<boolean> {
 export async function clearAllDrafts(): Promise<void> {
   // Note: This function is not currently used, but kept for API compatibility
   // If needed, we could implement a DELETE /api/drafts endpoint
-  console.warn('clearAllDrafts is not implemented for database storage');
 }
 

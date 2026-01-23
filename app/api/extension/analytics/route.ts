@@ -106,7 +106,6 @@ export async function POST(request: NextRequest) {
             { status: 400, headers: corsHeaders() }
         );
     } catch (error) {
-        console.error('[Extension API] Failed to save analytics:', error);
         return NextResponse.json(
             { error: 'Failed to save analytics' },
             { status: 500, headers: corsHeaders() }
@@ -190,7 +189,6 @@ export async function GET(request: NextRequest) {
             },
         }, { headers: corsHeaders() });
     } catch (error) {
-        console.error('[Extension API] Failed to get analytics:', error);
         return NextResponse.json(
             { error: 'Failed to get analytics' },
             { status: 500, headers: corsHeaders() }

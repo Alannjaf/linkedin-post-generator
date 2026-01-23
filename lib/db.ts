@@ -518,7 +518,6 @@ export async function deleteCustomTone(id: number): Promise<boolean> {
     `;
     return true;
   } catch (error) {
-    console.error('Error deleting custom tone:', error);
     throw error;
   }
 }

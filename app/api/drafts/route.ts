@@ -49,7 +49,6 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('Error fetching drafts:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to fetch drafts';
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
@@ -108,7 +107,6 @@ export async function POST(request: NextRequest) {
     const drafts = result as Draft[];
     return NextResponse.json(drafts[0], { status: 201 });
   } catch (error) {
-    console.error('Error creating draft:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to create draft';
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }

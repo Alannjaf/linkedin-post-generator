@@ -52,16 +52,11 @@ export async function optimizeImage(
     return dataUrl;
   }
 
-  // If image is too large, we'll return it anyway but log a warning
+  // If image is too large, we'll return it anyway
   // In a production environment, you might want to:
   // 1. Use canvas API to resize/compress the image
   // 2. Upload to a CDN and return a URL instead
   // 3. Use a server-side image processing library
-  
-  console.warn(
-    `Image size (${validation.sizeMB}MB) exceeds recommended limit (${maxSizeMB}MB). ` +
-    `Consider optimizing the image before sending.`
-  );
 
   return dataUrl;
 }

@@ -4,8 +4,6 @@ const API_BASE_URL = 'http://localhost:3000';
 
 // Handle extension install
 chrome.runtime.onInstalled.addListener((details) => {
-    console.log('[LinkedIn Post Generator] Extension installed:', details.reason);
-
     // Initialize storage
     chrome.storage.local.set({
         savedCount: 0,
@@ -100,9 +98,8 @@ async function syncFollowerHistory() {
                 }),
             });
 
-            console.log('[LinkedIn Post Generator] Synced follower history to backend');
         }
     } catch (error) {
-        console.error('[LinkedIn Post Generator] Failed to sync follower history:', error);
+        // Failed to sync follower history
     }
 }

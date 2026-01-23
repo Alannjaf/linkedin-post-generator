@@ -60,14 +60,10 @@ export async function POST(request: NextRequest) {
 
     const prompt = await buildPostPrompt({ context: enrichedContext, language, tone, length });
 
-    console.log('[Stream API] Starting streaming response for post generation');
-
     // Get the streaming response from OpenRouter
     const openRouterStream = await callOpenRouterStream({
       messages: [{ role: "user", content: prompt }],
     });
-
-    console.log('[Stream API] OpenRouter stream received, creating response stream');
 
     // Create an async iterator to process the stream
     async function* streamProcessor(): AsyncGenerator<string, void, unknown> {
@@ -94,7 +90,6 @@ export async function POST(request: NextRequest) {
           const { done, value } = await reader.read();
 
           if (done) {
-            console.log(`[Stream API] Stream done after ${chunkCount} chunks`);
             break;
           }
 
@@ -116,7 +111,6 @@ export async function POST(request: NextRequest) {
 
             // Check for stream end
             if (data === '[DONE]') {
-              console.log('[Stream API] Received [DONE] signal');
               // Send citations if web search was enabled
               if (webSearchCitations && webSearchCitations.length > 0) {
                 yield `data: ${JSON.stringify({ citations: webSearchCitations })}\n\n`;
@@ -129,23 +123,17 @@ export async function POST(request: NextRequest) {
               const parsed: OpenRouterStreamChunk = JSON.parse(data);
 
               if (parsed.error) {
-                console.error('[Stream API] OpenRouter error:', parsed.error);
                 yield `data: ${JSON.stringify({ error: parsed.error.message })}\n\n`;
                 return;
               }
 
               const content = parsed.choices?.[0]?.delta?.content;
               if (content) {
-                // Log first few chunks
-                if (chunkCount <= 3) {
-                  console.log(`[Stream API] Yielding chunk ${chunkCount}:`, content.substring(0, 30));
-                }
                 yield `data: ${JSON.stringify({ content })}\n\n`;
               }
 
               // Check for finish reason
               if (parsed.choices?.[0]?.finish_reason) {
-                console.log('[Stream API] Finish reason:', parsed.choices[0].finish_reason);
                 // Send citations if web search was enabled
                 if (webSearchCitations && webSearchCitations.length > 0) {
                   yield `data: ${JSON.stringify({ citations: webSearchCitations })}\n\n`;
@@ -155,7 +143,6 @@ export async function POST(request: NextRequest) {
               }
             } catch (parseError) {
               // Skip malformed JSON chunks
-              console.debug('[Stream API] Skipping malformed chunk');
             }
           }
         }
@@ -207,20 +194,16 @@ export async function POST(request: NextRequest) {
 
           controller.enqueue(encoder.encode(value));
         } catch (error) {
-          console.error('[Stream API] Pull error:', error);
           const errorMessage = error instanceof Error ? error.message : 'Stream error';
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: errorMessage })}\n\n`));
           controller.close();
         }
       },
       cancel() {
-        console.log('[Stream API] Stream cancelled by client');
         // Clean up the iterator
         iterator.return?.(undefined);
       }
     });
-
-    console.log('[Stream API] Returning streaming response');
 
     // Return as Server-Sent Events
     return new Response(stream, {
@@ -232,7 +215,6 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error("[Stream API] Error generating post:", error);
     const errorMessage =
       error instanceof Error ? error.message : "Failed to generate post";
 

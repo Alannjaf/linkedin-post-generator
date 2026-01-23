@@ -51,7 +51,7 @@ export default function SwipeFilePage() {
                 setHasMore(data.pagination?.hasMore || false);
             }
         } catch (error) {
-            console.error('Failed to fetch swipe file posts:', error);
+            // Failed to fetch swipe file posts
         } finally {
             setLoading(false);
         }
@@ -87,7 +87,6 @@ export default function SwipeFilePage() {
                 setPosts(prev => prev.filter(p => p.id !== post.id));
             }
         } catch (error) {
-            console.error('Failed to delete post:', error);
             alert('Failed to delete post');
         } finally {
             setDeletingId(null);

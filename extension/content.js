@@ -11,24 +11,8 @@ function createElement(tag, className, innerHTML = '') {
     return el;
 }
 
-// Remote logging
-async function logToServer(message, data = null) {
-    try {
-        console.log(`[LPG-DEBUG] ${message}`, data || '');
-        await fetch(`${API_BASE_URL}/api/extension/log`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message, data })
-        });
-    } catch (e) {
-        // Fallback if server is down
-        console.error('Remote log failed:', e);
-    }
-}
-
 // Initialize when DOM is ready
 function init() {
-    logToServer('Extension loaded', { url: window.location.href });
 
     // Wait for LinkedIn to fully load
     setTimeout(() => {
@@ -48,13 +32,10 @@ function addSaveButtonsToPosts() {
         'div[data-view-name="feed-full-update"]'
     ];
 
-    // Log what we're looking for
-    // logToServer(`Scanning for posts with selectors: ${selectors.join(', ')}`);
-
     const allMatches = document.querySelectorAll(selectors.join(', '));
     const validPosts = [];
 
-    // Filter duplicates and invalid items manually to log stats
+    // Filter duplicates and invalid items
     const seen = new Set();
     allMatches.forEach(el => {
         if (!el.isConnected) return; // Detached
@@ -68,7 +49,6 @@ function addSaveButtonsToPosts() {
         if (finalEl.hasAttribute('data-lpg-processed')) return; // Already done
         if (seen.has(finalEl)) return; // Duplicate in this batch
 
-        // Size check log (sampling first few failures)
         if (finalEl.offsetHeight < 50) {
             return;
         }
@@ -76,10 +56,6 @@ function addSaveButtonsToPosts() {
         seen.add(finalEl);
         validPosts.push(finalEl);
     });
-
-    if (validPosts.length > 0) {
-        logToServer(`Found ${validPosts.length} new valid posts to process`);
-    }
 
     validPosts.forEach((post) => {
         post.setAttribute('data-lpg-processed', 'true');
@@ -92,54 +68,126 @@ function addSaveButton(postElement) {
     // Check if button already exists (double check)
     if (postElement.querySelector('.lpg-save-btn')) return;
 
-    // Find the social actions bar
-    const actionButtons = postElement.querySelectorAll('[data-view-name="reaction-button"], [data-view-name="feed-comment-button"], button.feed-shared-social-action-bar__action-btn');
-
+    // Find the social actions bar - try multiple strategies
     let actionsContainer = null;
     let strategy = 'none';
 
-    if (actionButtons.length > 0) {
-        const firstBtn = actionButtons[0];
-        actionsContainer = firstBtn.closest('.feed-shared-social-action-bar') ||
-            firstBtn.parentElement?.parentElement ||
-            firstBtn.parentElement;
-        strategy = 'data-view-name';
+    // Strategy 1: Look for the standard LinkedIn action bar class
+    actionsContainer = postElement.querySelector('.feed-shared-social-action-bar, .social-actions-bar, [class*="social-action"]');
+    if (actionsContainer) strategy = 'class-name';
+
+    // Strategy 2: Find by data-view-name attributes
+    if (!actionsContainer) {
+        const actionButtons = postElement.querySelectorAll('[data-view-name="reaction-button"], [data-view-name="feed-comment-button"], [data-view-name*="reaction"], [data-view-name*="comment"]');
+        if (actionButtons.length > 0) {
+            const firstBtn = actionButtons[0];
+            actionsContainer = firstBtn.closest('.feed-shared-social-action-bar') ||
+                firstBtn.closest('[class*="action"]') ||
+                firstBtn.parentElement?.parentElement ||
+                firstBtn.parentElement;
+            if (actionsContainer) strategy = 'data-view-name';
+        }
     }
 
+    // Strategy 3: Find container with Like, Comment, Repost, Send buttons
     if (!actionsContainer) {
         const allButtons = postElement.querySelectorAll('button');
+        const actionButtonTexts = ['like', 'comment', 'repost', 'send', 'share'];
         for (const btn of allButtons) {
             const text = btn.innerText?.toLowerCase() || '';
-            if (text.includes('like') || text.includes('comment')) {
-                actionsContainer = btn.parentElement;
-                strategy = 'button-text-search';
-                break;
+            const ariaLabel = btn.getAttribute('aria-label')?.toLowerCase() || '';
+            if (actionButtonTexts.some(action => text.includes(action) || ariaLabel.includes(action))) {
+                // Find the common parent that contains multiple action buttons
+                let parent = btn.parentElement;
+                let depth = 0;
+                while (parent && depth < 5) {
+                    const siblingButtons = parent.querySelectorAll('button');
+                    const actionBtnCount = Array.from(siblingButtons).filter(b => {
+                        const bText = b.innerText?.toLowerCase() || '';
+                        const bAria = b.getAttribute('aria-label')?.toLowerCase() || '';
+                        return actionButtonTexts.some(action => bText.includes(action) || bAria.includes(action));
+                    }).length;
+                    if (actionBtnCount >= 3) { // If we find 3+ action buttons, this is likely the container
+                        actionsContainer = parent;
+                        strategy = 'button-text-search';
+                        break;
+                    }
+                    parent = parent.parentElement;
+                    depth++;
+                }
+                if (actionsContainer) break;
             }
         }
     }
 
+    // Strategy 4: Look for description wrapper sibling
     if (!actionsContainer) {
         actionsContainer = postElement.querySelector('.feed-shared-update-v2__description-wrapper')?.nextElementSibling;
         if (actionsContainer) strategy = 'description-sibling';
     }
 
     if (!actionsContainer) {
-        // Debug failure
-        // logToServer('Failed to find action container for post', { 
-        //     htmlInfo: postElement.className,
-        //     textPreview: postElement.innerText.substring(0, 50)
-        // });
         return;
     }
 
-    // Find the 'Send' button or the last button to use as a reference/clone source
-    const buttons = Array.from(actionsContainer.querySelectorAll('button'));
-    const referenceBtn = buttons.find(b => b.innerText.includes('Send')) || buttons[buttons.length - 1];
+    // Find all buttons in the action bar - exclude our own save button
+    const buttons = Array.from(actionsContainer.querySelectorAll('button:not(.lpg-save-btn)'));
+    
+    // Find the 'Send' button - try multiple strategies
+    let sendBtn = null;
+    
+    // Strategy 1: Look for button with "Send" text or aria-label
+    sendBtn = buttons.find(b => {
+        const text = b.innerText?.toLowerCase() || '';
+        const ariaLabel = b.getAttribute('aria-label')?.toLowerCase() || '';
+        const title = b.getAttribute('title')?.toLowerCase() || '';
+        return text.includes('send') || ariaLabel.includes('send') || title.includes('send');
+    });
+    
+    // Strategy 2: Look for data-view-name attribute
+    if (!sendBtn) {
+        sendBtn = actionsContainer.querySelector('button[data-view-name*="send"], button[data-view-name*="share"]');
+    }
+    
+    // Strategy 3: Find by icon (paper plane icon is typically Send)
+    if (!sendBtn) {
+        sendBtn = buttons.find(b => {
+            const svg = b.querySelector('svg');
+            if (svg) {
+                const paths = svg.querySelectorAll('path');
+                // Paper plane icon typically has specific path patterns
+                const pathData = Array.from(paths).map(p => p.getAttribute('d') || '').join('');
+                return pathData.includes('M2.01 21L23 12 2.01 3 2 10l15 2-15 2z') || 
+                       pathData.includes('M2 21l21-9L2 3v7l15 2-15 2v7z');
+            }
+            return false;
+        });
+    }
+    
+    // Strategy 4: Find Repost button and use the next button (which should be Send)
+    if (!sendBtn) {
+        const repostBtn = buttons.find(b => {
+            const text = b.innerText?.toLowerCase() || '';
+            const ariaLabel = b.getAttribute('aria-label')?.toLowerCase() || '';
+            return (text.includes('repost') || text.includes('share')) && 
+                   !text.includes('send') && !ariaLabel.includes('send');
+        });
+        if (repostBtn && repostBtn.nextElementSibling) {
+            sendBtn = repostBtn.nextElementSibling;
+        }
+    }
+    
+    // Strategy 5: Last button in the container (usually Send is last)
+    if (!sendBtn && buttons.length > 0) {
+        sendBtn = buttons[buttons.length - 1];
+    }
 
-    if (!referenceBtn) return;
+    if (!sendBtn) {
+        return;
+    }
 
     // CLONE STRATEGY: Clone the reference button to inherit exact LinkedIn styles/classes
-    const saveBtn = referenceBtn.cloneNode(true);
+    const saveBtn = sendBtn.cloneNode(true);
 
     // Clean up attributes that might trigger LinkedIn events/tooltips
     saveBtn.removeAttribute('id');
@@ -154,7 +202,7 @@ function addSaveButton(postElement) {
     if (svg) {
         const newSvgOps = document.createElement('div');
         newSvgOps.innerHTML = `
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24" class="${svg.getAttribute('class') || ''}">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" class="${svg.getAttribute('class') || ''}">
             <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
         </svg>`;
         const newSvg = newSvgOps.firstElementChild;
@@ -188,8 +236,12 @@ function addSaveButton(postElement) {
         updateTextNode(saveBtn);
     }
 
-    // Styles adjustments
-    saveBtn.style.marginLeft = '4px'; // Tiny spacing
+    // Styles adjustments - ensure it sits right beside Send button
+    saveBtn.style.marginRight = '8px'; // Space between Save and Send
+    saveBtn.style.marginLeft = '0';
+    
+    // Ensure the button maintains its position (don't use order as it might conflict)
+    // Instead, rely on DOM insertion order
 
     // Remove existing event listeners by cloning (already done) 
     // But we need to be sure no inline onclicks or overly aggressive delegates interfere.
@@ -200,20 +252,46 @@ function addSaveButton(postElement) {
         e.preventDefault();
         e.stopPropagation();
 
-        logToServer('Save button clicked');
         const postData = extractPostData(postElement);
         if (postData) {
             await savePost(postData, saveBtn);
         } else {
             showToast('Could not extract post content', 'error');
-            logToServer('Extraction failed');
         }
     };
 
-    // Insert (Always next to the reference button, which should be 'Send' or last)
-    if (referenceBtn.nextSibling) {
-        actionsContainer.insertBefore(saveBtn, referenceBtn.nextSibling);
+    // Find Repost button (which should be right before Send)
+    const repostBtn = buttons.find(b => {
+        const text = b.innerText?.toLowerCase() || '';
+        const ariaLabel = b.getAttribute('aria-label')?.toLowerCase() || '';
+        const title = b.getAttribute('title')?.toLowerCase() || '';
+        return (text.includes('repost') || text.includes('share') || 
+                ariaLabel.includes('repost') || ariaLabel.includes('share') ||
+                title.includes('repost') || title.includes('share')) &&
+               !text.includes('send') && !ariaLabel.includes('send');
+    });
+
+    // CRITICAL: Insert right before Send button, or after Repost if found
+    const sendParent = sendBtn.parentElement;
+    if (sendParent) {
+        // Strategy 1: If Repost is found and it's right before Send, insert after Repost
+        if (repostBtn && repostBtn.parentElement === sendParent) {
+            const repostIndex = Array.from(sendParent.children).indexOf(repostBtn);
+            const sendIndex = Array.from(sendParent.children).indexOf(sendBtn);
+            
+            // Only use this if Repost is actually right before Send
+            if (sendIndex === repostIndex + 1) {
+                sendParent.insertBefore(saveBtn, sendBtn);
+            } else {
+                // Repost is not right before Send, insert directly before Send
+                sendParent.insertBefore(saveBtn, sendBtn);
+            }
+        } else {
+            // No Repost found or different parent, insert directly before Send
+            sendParent.insertBefore(saveBtn, sendBtn);
+        }
     } else {
+        // Fallback: append to container
         actionsContainer.appendChild(saveBtn);
     }
 }
@@ -251,7 +329,6 @@ function extractPostData(postElement) {
         }
 
         if (!content) {
-            console.log('[LinkedIn Post Generator] No content found in post');
             return null;
         }
 
@@ -385,15 +462,11 @@ function extractPostData(postElement) {
                 const url = new URL(postUrl);
                 postUrl = url.origin + url.pathname;
             } catch (e) {
-                console.error('Invalid URL:', postUrl);
+                // Invalid URL, keep as is
             }
         } else {
-            // Fallback only if absolutely necessary, but log warning
-            console.warn('Could not extract specific post URL, falling back to window location');
             postUrl = window.location.href;
         }
-
-        console.log('[LinkedIn Post Generator] Extracted:', { authorName, contentLength: content.length, likes });
 
         return {
             content,
@@ -409,16 +482,24 @@ function extractPostData(postElement) {
             savedAt: new Date().toISOString(),
         };
     } catch (error) {
-        console.error('[LinkedIn Post Generator] Failed to extract post data:', error);
         return null;
     }
 }
 
 // Save post to backend
 async function savePost(postData, buttonEl) {
-    const originalText = buttonEl.innerHTML;
-    buttonEl.innerHTML = '<span>Saving...</span>';
+    const originalHTML = buttonEl.innerHTML;
+    const originalText = buttonEl.querySelector('span')?.textContent || 'Save';
+    
+    // Show loading state with animation
+    buttonEl.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="lpg-spinner">
+            <path d="M21 12a9 9 0 11-6.219-8.56"/>
+        </svg>
+        <span>Saving...</span>
+    `;
     buttonEl.disabled = true;
+    buttonEl.classList.add('lpg-saving');
 
     try {
         const response = await fetch(`${API_BASE_URL}/api/extension/save-post`, {
@@ -433,30 +514,57 @@ async function savePost(postData, buttonEl) {
             throw new Error('Failed to save post');
         }
 
-        // Update button to show success
+        // Success animation - show checkmark with smooth transition
+        buttonEl.classList.remove('lpg-saving');
+        buttonEl.classList.add('lpg-save-btn--saved', 'lpg-save-success');
         buttonEl.innerHTML = `
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2">
-                <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" class="lpg-checkmark">
+                <path d="M20 6L9 17l-5-5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
             <span>Saved!</span>
         `;
-        buttonEl.classList.add('lpg-save-btn--saved');
+
+        // Add pulse animation
+        buttonEl.style.animation = 'lpg-pulse 0.6s ease-out';
 
         // Update saved count in storage
         const stats = await chrome.storage.local.get(['savedCount']);
         await chrome.storage.local.set({ savedCount: (stats.savedCount || 0) + 1 });
 
+        // Show enhanced toast notification
         showToast('Post saved to swipe file!', 'success');
 
+        // Keep saved state for 3 seconds, then fade to a subtle saved indicator
+        setTimeout(() => {
+            buttonEl.style.animation = '';
+            buttonEl.innerHTML = `
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" class="lpg-bookmark-icon">
+                    <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+                </svg>
+                <span>Saved</span>
+            `;
+            buttonEl.disabled = true; // Keep disabled to show it's already saved
+        }, 3000);
+
     } catch (error) {
-        console.error('[LinkedIn Post Generator] Failed to save post:', error);
-        buttonEl.innerHTML = '<span>Failed</span>';
+        buttonEl.classList.remove('lpg-saving', 'lpg-save-btn--saved', 'lpg-save-success');
+        buttonEl.innerHTML = `
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            <span>Failed</span>
+        `;
+        buttonEl.style.background = '#ef4444';
         showToast('Failed to save. Is the app running?', 'error');
 
         setTimeout(() => {
-            buttonEl.innerHTML = originalText;
+            buttonEl.innerHTML = originalHTML;
             buttonEl.disabled = false;
-        }, 2000);
+            buttonEl.style.background = '';
+            buttonEl.style.animation = '';
+        }, 3000);
     }
 }
 
@@ -508,7 +616,6 @@ function observeNewPosts() {
     const mainElement = document.querySelector('main');
     if (mainElement) {
         observer.observe(mainElement, { childList: true, subtree: true });
-        console.log('[LinkedIn Post Generator] Observing for new posts');
     }
 }
 

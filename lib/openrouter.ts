@@ -89,8 +89,6 @@ export async function generatePostStreaming(
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), STREAM_TIMEOUT);
 
-  console.log('[Client Streaming] Starting streaming request...');
-
   try {
     const response = await fetch('/api/generate/stream', {
       method: 'POST',
@@ -103,8 +101,6 @@ export async function generatePostStreaming(
 
     clearTimeout(timeoutId);
 
-    console.log('[Client Streaming] Response received, status:', response.status);
-
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       throw new Error(
@@ -115,8 +111,6 @@ export async function generatePostStreaming(
     if (!response.body) {
       throw new Error('No response body received');
     }
-
-    console.log('[Client Streaming] Starting to read stream...');
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
@@ -130,18 +124,12 @@ export async function generatePostStreaming(
         const { done, value } = await reader.read();
 
         if (done) {
-          console.log('[Client Streaming] Stream reading complete, total chunks:', chunkCount);
           break;
         }
 
         chunkCount++;
         const decodedChunk = decoder.decode(value, { stream: true });
         buffer += decodedChunk;
-
-        // Log first few chunks to debug
-        if (chunkCount <= 3) {
-          console.log(`[Client Streaming] Chunk ${chunkCount}:`, decodedChunk.substring(0, 100));
-        }
 
         const lines = buffer.split('\n');
         buffer = lines.pop() || '';
@@ -156,7 +144,6 @@ export async function generatePostStreaming(
           const data = trimmedLine.slice(6);
 
           if (data === '[DONE]') {
-            console.log('[Client Streaming] Received [DONE] signal');
             // Stream complete, process the final content
             const result = processCompletedContent(fullContent, params.language, citations);
             callbacks.onComplete(result);
@@ -174,23 +161,17 @@ export async function generatePostStreaming(
             }
             if (parsed.citations) {
               citations = parsed.citations;
-              console.log('[Client Streaming] Received citations:', citations?.length ?? 0);
             }
             if (parsed.error) {
-              console.error('[Client Streaming] Server error:', parsed.error);
               throw new Error(parsed.error);
             }
           } catch (parseErr) {
-            // Skip malformed JSON but log it
-            if (data && data.length > 0 && data !== '[DONE]') {
-              console.warn('[Client Streaming] Failed to parse:', data.substring(0, 50));
-            }
+            // Skip malformed JSON
           }
         }
       }
 
       // If we reach here without [DONE], still process what we have
-      console.log('[Client Streaming] Processing remaining content, length:', fullContent.length);
       if (fullContent) {
         const result = processCompletedContent(fullContent, params.language, citations);
         callbacks.onComplete(result);
@@ -202,7 +183,6 @@ export async function generatePostStreaming(
     }
   } catch (error) {
     clearTimeout(timeoutId);
-    console.error('[Client Streaming] Error:', error);
 
     if (error instanceof Error) {
       if (error.name === 'AbortError') {

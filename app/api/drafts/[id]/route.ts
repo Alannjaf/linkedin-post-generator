@@ -35,7 +35,6 @@ export async function GET(
 
     return NextResponse.json(drafts[0]);
   } catch (error) {
-    console.error('Error fetching draft:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to fetch draft';
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
@@ -106,7 +105,6 @@ export async function PUT(
     const updatedDrafts = result as Draft[];
     return NextResponse.json(updatedDrafts[0]);
   } catch (error) {
-    console.error('Error updating draft:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to update draft';
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
@@ -133,7 +131,6 @@ export async function DELETE(
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error deleting draft:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to delete draft';
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }

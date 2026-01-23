@@ -144,8 +144,6 @@ export function useVoiceInput(language: Language = 'english'): UseVoiceInputRetu
     };
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      console.error('Speech recognition error:', event.error);
-      
       let errorMessage = 'Speech recognition error occurred';
       
       switch (event.error) {
@@ -217,7 +215,6 @@ export function useVoiceInput(language: Language = 'english'): UseVoiceInputRetu
       setTranscript(''); // Clear previous transcript when starting new session
       recognitionRef.current.start();
     } catch (err) {
-      console.error('Error starting speech recognition:', err);
       setError('Failed to start voice input. Please try again.');
     }
   }, [isSupported]);
@@ -227,7 +224,7 @@ export function useVoiceInput(language: Language = 'english'): UseVoiceInputRetu
       try {
         recognitionRef.current.stop();
       } catch (err) {
-        console.error('Error stopping speech recognition:', err);
+        // Error stopping speech recognition
       }
     }
   }, [isListening]);

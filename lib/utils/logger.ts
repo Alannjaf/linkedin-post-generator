@@ -1,37 +1,26 @@
 /**
  * Production-safe logging utility
- * Only logs in development environment
+ * All logging disabled
  */
-
-const isDevelopment = process.env.NODE_ENV === 'development';
 
 export const logger = {
   log: (...args: any[]) => {
-    if (isDevelopment) {
-      console.log(...args);
-    }
+    // Logging disabled
   },
 
   error: (...args: any[]) => {
-    // Always log errors, but format them properly
-    console.error(...args);
+    // Logging disabled
   },
 
   warn: (...args: any[]) => {
-    if (isDevelopment) {
-      console.warn(...args);
-    }
+    // Logging disabled
   },
 
   info: (...args: any[]) => {
-    if (isDevelopment) {
-      console.info(...args);
-    }
+    // Logging disabled
   },
 
   debug: (...args: any[]) => {
-    if (isDevelopment) {
-      console.debug(...args);
-    }
+    // Logging disabled
   },
 };

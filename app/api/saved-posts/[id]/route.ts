@@ -21,7 +21,6 @@ export async function DELETE(
 
     return NextResponse.json({ success: true, message: 'Post deleted successfully' });
   } catch (error) {
-    console.error('Error deleting saved post:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to delete post';
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }

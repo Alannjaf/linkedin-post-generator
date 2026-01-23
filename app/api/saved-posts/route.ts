@@ -23,7 +23,6 @@ export async function GET() {
 
     return NextResponse.json(savedPosts);
   } catch (error) {
-    console.error('Error fetching saved posts:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to fetch saved posts';
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
@@ -61,7 +60,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(savedPost, { status: 201 });
   } catch (error) {
-    console.error('Error saving post:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to save post';
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
